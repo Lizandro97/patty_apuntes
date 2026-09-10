@@ -21,12 +21,14 @@ export type AppConfig = {
   }
 }
 
+const LEGACY_AUTO = ["#6366f1", "#EC4899", "#ec4899"]
+
 const defaults: AppConfig = {
-  primary_color: "#6366f1",
+  primary_color: "",
   font_family: "Inter",
   font_size_px: 14,
   table_density: "normal",
-  table_header_bg: "#e0e7ff",
+  table_header_bg: "",
   grid_columns: 3,
   date_format: "dd/mm/aaaa",
   show_summary: true,
@@ -53,7 +55,9 @@ export const useConfigStore = create<Store>()(
       applyCss: () => {
         const s = get()
         const r = document.documentElement
-        r.style.setProperty("--primary", s.primary_color)
+        r.style.setProperty("--primary", s.primary_color || "var(--accent)")
+        const auto = !s.primary_color || LEGACY_AUTO.includes(s.primary_color)
+        r.style.setProperty("--sheet-accent", auto ? "var(--accent)" : s.primary_color)
         r.style.setProperty("--font-family", s.font_family)
         r.style.setProperty("--font-size", s.font_size_px + "px")
         r.style.setProperty("--table-header-bg", s.table_header_bg)

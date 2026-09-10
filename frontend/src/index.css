@@ -78,6 +78,19 @@ html, body, #root {
   outline-offset: 1px;
 }
 
+/* Sheet accent: paper surfaces follow this, chrome follows --accent.
+   applyCss() points it at the theme accent (Auto) or a custom hex.
+   Plain fallbacks first for browsers without color-mix. */
+:root {
+  --sheet-accent: var(--accent);
+  --sheet-soft: #fdf2f8;
+  --sheet-soft: color-mix(in srgb, var(--sheet-accent) 9%, white);
+  --sheet-border: #fce7f3;
+  --sheet-border: color-mix(in srgb, var(--sheet-accent) 24%, white);
+  --sheet-ink: #831843;
+  --sheet-ink: color-mix(in srgb, var(--sheet-accent) 72%, black);
+}
+
 body {
   margin: 0;
   background: var(--bg);

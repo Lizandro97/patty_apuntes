@@ -18,14 +18,14 @@ function EmpresaPicker({ fila, empresas, onSelect, onClose }: { fila: any; empre
   useEffect(() => { const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose() }; document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h) }, [onClose])
   const filtered = empresas.filter((e: any) => e.nombre.toLowerCase().includes(q.toLowerCase()))
   return (
-    <div ref={ref} className="absolute z-30 top-full left-0 mt-1 w-[280px] bg-white border border-[var(--accent-border)] rounded-xl shadow-[0_12px_32px_rgba(132,24,67,0.15)] p-2">
-      <Input autoFocus aria-label="Buscar empresa registrada" placeholder="Buscar empresa registrada..." value={q} onChange={e=>setQ(e.target.value)} className="h-8 text-sm mb-2 bg-[var(--accent-soft)] border-[var(--accent-border)] text-[#1e293b] placeholder:text-[var(--text-dim)]" />
+    <div ref={ref} className="absolute z-30 top-full left-0 mt-1 w-[280px] bg-white border border-[var(--sheet-border)] rounded-xl shadow-[0_12px_32px_rgba(132,24,67,0.15)] p-2">
+      <Input autoFocus aria-label="Buscar empresa registrada" placeholder="Buscar empresa registrada..." value={q} onChange={e=>setQ(e.target.value)} className="h-8 text-sm mb-2 bg-[var(--sheet-soft)] border-[var(--sheet-border)] text-[#1e293b] placeholder:text-[var(--text-dim)]" />
       <div className="max-h-[180px] overflow-auto space-y-1">
-        {filtered.map((e:any)=>(<button key={e.id} onClick={()=>onSelect({ empresa_id: e.id })} className="w-full text-left px-3 py-2 rounded-lg hover:bg-[var(--accent-soft)] text-sm flex items-center justify-between text-[#1e293b]"><span>{e.nombre}</span><span className="text-[11px] text-[var(--accent)]">{fila.empresa_id===e.id ? "✓" : ""}</span></button>))}
+        {filtered.map((e:any)=>(<button key={e.id} onClick={()=>onSelect({ empresa_id: e.id })} className="w-full text-left px-3 py-2 rounded-lg hover:bg-[var(--sheet-soft)] text-sm flex items-center justify-between text-[#1e293b]"><span>{e.nombre}</span><span className="text-[11px] text-[var(--sheet-accent)]">{fila.empresa_id===e.id ? "✓" : ""}</span></button>))}
         {filtered.length===0 && <div className="text-xs text-[var(--text-dim)] px-3 py-2">Sin resultados. Registra la empresa primero en la página Empresas.</div>}
       </div>
       {fila.empresa_id && (
-        <div className="border-t border-[var(--accent-border)] mt-2 pt-2">
+        <div className="border-t border-[var(--sheet-border)] mt-2 pt-2">
           <button onClick={()=>onSelect({ empresa_id: "" })} className="w-full text-left px-3 py-2 rounded-lg hover:bg-red-50 text-xs text-[var(--text-dim)] hover:text-red-600">Quitar empresa de esta fila</button>
         </div>
       )}
@@ -53,15 +53,15 @@ function RowMenu({ fila, idx, total, onMove, onDelete }: { fila: any; idx: numbe
         aria-label="Opciones de fila"
         aria-haspopup="menu"
         aria-expanded={open}
-        className="block w-0 h-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer border-b-[12px] border-b-[var(--accent)] hover:brightness-125 border-l-[12px] border-l-transparent"
+        className="block w-0 h-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer border-b-[12px] border-b-[var(--sheet-accent)] hover:brightness-125 border-l-[12px] border-l-transparent"
       />
       {open && (
-        <div className="absolute top-full left-0 mt-1 w-[190px] bg-white border border-[var(--accent-border)] rounded-xl shadow-[0_12px_32px_rgba(132,24,67,0.15)] p-1.5 z-30 text-left">
+        <div className="absolute top-full left-0 mt-1 w-[190px] bg-white border border-[var(--sheet-border)] rounded-xl shadow-[0_12px_32px_rgba(132,24,67,0.15)] p-1.5 z-30 text-left">
           {!confirming ? (
             <>
-              <button onClick={() => { onMove(-1); setOpen(false) }} disabled={idx === 0} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-[#1e293b] hover:bg-[var(--accent-soft)] disabled:opacity-40 disabled:hover:bg-transparent"><ArrowUp size={13}/> Subir fila</button>
-              <button onClick={() => { onMove(1); setOpen(false) }} disabled={idx === total - 1} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-[#1e293b] hover:bg-[var(--accent-soft)] disabled:opacity-40 disabled:hover:bg-transparent"><ArrowDown size={13}/> Bajar fila</button>
-              <div className="border-t border-[var(--accent-border)] mt-1 pt-1">
+              <button onClick={() => { onMove(-1); setOpen(false) }} disabled={idx === 0} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-[#1e293b] hover:bg-[var(--sheet-soft)] disabled:opacity-40 disabled:hover:bg-transparent"><ArrowUp size={13}/> Subir fila</button>
+              <button onClick={() => { onMove(1); setOpen(false) }} disabled={idx === total - 1} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-[#1e293b] hover:bg-[var(--sheet-soft)] disabled:opacity-40 disabled:hover:bg-transparent"><ArrowDown size={13}/> Bajar fila</button>
+              <div className="border-t border-[var(--sheet-border)] mt-1 pt-1">
                 <button onClick={() => setConfirming(true)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-red-600 hover:bg-red-50"><Trash2 size={13}/> Eliminar fila</button>
               </div>
             </>
@@ -70,7 +70,7 @@ function RowMenu({ fila, idx, total, onMove, onDelete }: { fila: any; idx: numbe
               <div className="text-xs font-medium text-[#1e293b] px-1.5 pb-1">¿Eliminar “{fila.nombre_snapshot || `Fila ${idx + 1}`}”?</div>
               <div className="text-[11px] text-[var(--text-dim)] px-1.5 pb-2.5">Se borrarán sus meses anotados.</div>
               <div className="flex gap-1.5">
-                <button onClick={() => setConfirming(false)} className="flex-1 h-7 rounded-lg border border-[var(--accent-border)] text-xs text-[#64748b] hover:bg-[var(--accent-soft)]">Cancelar</button>
+                <button onClick={() => setConfirming(false)} className="flex-1 h-7 rounded-lg border border-[var(--sheet-border)] text-xs text-[#64748b] hover:bg-[var(--sheet-soft)]">Cancelar</button>
                 <button onClick={() => { onDelete(); setOpen(false); setConfirming(false) }} className="flex-1 h-7 rounded-lg bg-red-500 hover:bg-red-600 text-xs text-white font-medium">Eliminar</button>
               </div>
             </div>
@@ -84,7 +84,7 @@ function RowMenu({ fila, idx, total, onMove, onDelete }: { fila: any; idx: numbe
 function FilaTextCell({ fila, field, onSave }: { fila: any; field: "responsable" | "observacion"; onSave: (v: string) => void }) {
   const [v, setV] = useState(fila?.[field] ?? "")
   useEffect(()=> setV(fila?.[field] ?? ""), [fila?.id, fila?.[field]])
-  return <input aria-label={field === "responsable" ? "Responsable" : "Observaciones"} value={v} onChange={e=>setV(e.target.value)} onBlur={()=>{ if(v!== (fila?.[field] ?? "")) onSave(v)}} onKeyDown={e=>{ if(e.key==="Enter") (e.target as HTMLInputElement).blur() }} placeholder="—" className="w-full min-w-0 max-w-full h-7 px-2 text-xs border border-transparent hover:border-[var(--accent-border)] focus:border-[var(--accent-border)] rounded focus:outline-none bg-transparent text-[#1e293b]" />
+  return <input aria-label={field === "responsable" ? "Responsable" : "Observaciones"} value={v} onChange={e=>setV(e.target.value)} onBlur={()=>{ if(v!== (fila?.[field] ?? "")) onSave(v)}} onKeyDown={e=>{ if(e.key==="Enter") (e.target as HTMLInputElement).blur() }} placeholder="—" className="w-full min-w-0 max-w-full h-7 px-2 text-xs border border-transparent hover:border-[var(--sheet-border)] focus:border-[var(--sheet-accent)] rounded focus:outline-none bg-transparent text-[#1e293b]" />
 }
 
 export function Editor() {
@@ -187,6 +187,7 @@ export function Editor() {
   if (!archivoId) return <div className="p-8 text-center text-[var(--text-dim)]">Creando...</div>
   if (!archivo || !filas) return <div className="p-8 text-[var(--text-dim)]">Cargando...</div>
   const map=new Map<string,any>(); celdas?.forEach((c:any)=>map.set(`${c.fila_id}-${c.anio}-${c.mes}`,c))
+  const headBg = cfg.table_header_bg && cfg.table_header_bg !== "#e0e7ff" ? cfg.table_header_bg : ""
   const years=Array.from({length: archivo.periodo_fin - archivo.periodo_inicio + 1}, (_,i)=>archivo.periodo_inicio+i)
   const personalOpts=Array.from({length: archivo.personal_count||2},(_,i)=>`P${i+1}`)
   const move=(idx:number,dir:-1|1)=>{
@@ -251,29 +252,29 @@ export function Editor() {
           <div style={{ width: sheetBase.w, minHeight: sheetBase.h }} className="max-w-none mx-auto bg-white shadow-[0_20px_60px_rgba(0,0,0,0.45)] rounded-lg overflow-hidden transition-all duration-300">
             <div className="p-6" style={{ zoom: zoom }}>
               <div className="flex items-center gap-2 mb-3 text-xs">
-                {archivo.tipo_revision ? <span className="px-2 py-1 rounded bg-[var(--accent-soft)] border border-[var(--accent-border)] text-[var(--accent-ink)]">{archivo.tipo_revision}</span> : null}
+                {archivo.tipo_revision ? <span className="px-2 py-1 rounded bg-[var(--sheet-soft)] border border-[var(--sheet-border)] text-[var(--sheet-ink)]">{archivo.tipo_revision}</span> : null}
                 <span className="text-[var(--text-dim)]">{archivo.periodo_inicio} — {archivo.periodo_fin} • {filas.length} filas</span>
               </div>
               {cfg.show_summary && stats && (
-                <div className="flex items-center gap-4 mb-4 px-3 py-2 rounded-lg bg-[var(--accent-soft)] border border-[var(--accent-border)] text-[11px]">
+                <div className="flex items-center gap-4 mb-4 px-3 py-2 rounded-lg bg-[var(--sheet-soft)] border border-[var(--sheet-border)] text-[11px]">
                   <span className="flex items-center gap-1.5 text-[var(--success)]"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"/>Revisadas <b>{stats.revisadas}/{stats.total || filas.length}</b></span>
                   <span className="flex items-center gap-1.5 text-[var(--warning)]"><span className="w-1.5 h-1.5 rounded-full bg-orange-400"/>Pendientes <b>{stats.pendientes}</b></span>
-                  <span className="flex items-center gap-2 text-[var(--accent-ink)] ml-auto"><span>Progreso <b>{stats.progreso}%</b></span><span className="w-24 h-1.5 bg-[var(--surface)] border border-[var(--accent-border)] rounded-full overflow-hidden inline-block"><span className="block h-full bg-[var(--accent)]" style={{width:`${stats.progreso}%`}}/></span></span>
+                  <span className="flex items-center gap-2 text-[var(--sheet-ink)] ml-auto"><span>Progreso <b>{stats.progreso}%</b></span><span className="w-24 h-1.5 bg-[var(--surface)] border border-[var(--sheet-border)] rounded-full overflow-hidden inline-block"><span className="block h-full bg-[var(--sheet-accent)]" style={{width:`${stats.progreso}%`}}/></span></span>
                 </div>
               )}
               <div className="overflow-auto">
                 <table className={`w-full text-xs border-collapse table-${cfg.table_density}`} style={{ minWidth: 488 + years.length * 12 * 20 }}>
                   <thead>
-                    <tr className="bg-[var(--accent-soft)] border-b border-[var(--accent-border)]">
-                      <th rowSpan={2} className="p-2 w-[44px] text-left text-[var(--accent-ink)] font-semibold align-middle border-x border-[var(--accent-border)]">N.</th>
-                      <th rowSpan={2} className="p-2 text-center text-[var(--accent-ink)] font-semibold min-w-[160px] align-middle border-x border-[var(--accent-border)]">Empresa</th>
-                      <th colSpan={years.length * 12} className="p-2 text-center text-[var(--accent-ink)] font-semibold text-[12px] border-x border-[var(--accent-border)]">Año / Meses</th>
-                      {cfg.visible_fields.responsable && <th rowSpan={2} className="p-2 text-center text-[var(--accent-ink)] font-semibold align-middle min-w-[90px] border-x border-[var(--accent-border)]">Responsable</th>}
-                      {cfg.visible_fields.observaciones && <th rowSpan={2} className="p-2 text-center text-[var(--accent-ink)] font-semibold align-middle min-w-[140px] border-x border-[var(--accent-border)]">Observaciones</th>}
+                    <tr className="bg-[var(--sheet-soft)] border-b border-[var(--sheet-border)]" style={headBg ? { background: headBg } : undefined}>
+                      <th rowSpan={2} className="p-2 w-[44px] text-left text-[var(--sheet-ink)] font-semibold align-middle border-x border-[var(--sheet-border)]">N.</th>
+                      <th rowSpan={2} className="p-2 text-center text-[var(--sheet-ink)] font-semibold min-w-[160px] align-middle border-x border-[var(--sheet-border)]">Empresa</th>
+                      <th colSpan={years.length * 12} className="p-2 text-center text-[var(--sheet-ink)] font-semibold text-[12px] border-x border-[var(--sheet-border)]">Año / Meses</th>
+                      {cfg.visible_fields.responsable && <th rowSpan={2} className="p-2 text-center text-[var(--sheet-ink)] font-semibold align-middle min-w-[90px] border-x border-[var(--sheet-border)]">Responsable</th>}
+                      {cfg.visible_fields.observaciones && <th rowSpan={2} className="p-2 text-center text-[var(--sheet-ink)] font-semibold align-middle min-w-[140px] border-x border-[var(--sheet-border)]">Observaciones</th>}
                     </tr>
-                    <tr className="bg-[var(--accent-soft)] border-b border-[var(--accent-border)]">
+                    <tr className="bg-[var(--sheet-soft)] border-b border-[var(--sheet-border)]" style={headBg ? { background: headBg } : undefined}>
                       {years.map(y=>(
-                        <th key={y} colSpan={12} className="p-1 text-center text-[var(--accent-ink)] font-semibold text-[11px] border-x border-[var(--accent-border)]">{y}<div className="flex text-[9px] font-normal text-[var(--accent-ink)]">{MESES.map((m, mi)=> <span key={`${y}-${mi}-${m}`} className="flex-1 text-center">{m}</span>)}</div></th>
+                        <th key={y} colSpan={12} className="p-1 text-center text-[var(--sheet-ink)] font-semibold text-[11px] border-x border-[var(--sheet-border)]">{y}<div className="flex text-[9px] font-normal text-[var(--sheet-ink)]">{MESES.map((m, mi)=> <span key={`${y}-${mi}-${m}`} className="flex-1 text-center">{m}</span>)}</div></th>
                       ))}
                     </tr>
                   </thead>
@@ -282,13 +283,13 @@ export function Editor() {
                       <tr><td colSpan={2 + years.length*12 + (cfg.visible_fields.responsable?1:0) + (cfg.visible_fields.observaciones?1:0)} className="p-12 text-center text-[var(--text-dim)]"><div className="text-sm">Tu papel está en blanco</div></td></tr>
                     ) : (
                       filas.slice().sort((a:any,b:any)=>a.orden-b.orden).map((fila:any, idx:number)=>(
-                        <tr key={fila.id} className="border-t border-[var(--accent-border)] hover:bg-[var(--accent-soft)]">
+                        <tr key={fila.id} className="border-t border-[var(--sheet-border)] hover:bg-[var(--sheet-soft)]">
                           <td className="p-2 text-center text-[var(--text-dim)] text-xs relative group">
                             {idx+1}
                             <RowMenu fila={fila} idx={idx} total={orderedFilas.length} onMove={(dir)=>move(idx,dir)} onDelete={()=>deleteFila.mutate(fila.id)} />
                           </td>
                           <td className="p-2 relative text-center">
-                            <button onClick={()=>setPickFilaId(pickFilaId===fila.id?null:fila.id)} title={fila.nombre_snapshot ? "Cambiar empresa" : "Elegir empresa"} className={`rounded px-2 h-7 w-full text-xs flex items-center gap-1 border border-transparent hover:border-[var(--accent-border)] hover:bg-[var(--accent-soft)] ${fila.nombre_snapshot ? "font-medium text-[#1e293b]" : ""}`}>
+                            <button onClick={()=>setPickFilaId(pickFilaId===fila.id?null:fila.id)} title={fila.nombre_snapshot ? "Cambiar empresa" : "Elegir empresa"} className={`rounded px-2 h-7 w-full text-xs flex items-center gap-1 border border-transparent hover:border-[var(--sheet-border)] hover:bg-[var(--sheet-soft)] ${fila.nombre_snapshot ? "font-medium text-[#1e293b]" : ""}`}>
                               <span className="flex-1 text-left truncate">{fila.nombre_snapshot || " "}</span>
                               <span className={`text-[10px] ml-auto ${fila.nombre_snapshot ? "text-[var(--text-dim)]" : "text-[var(--text-dim)]"}`}>▾</span>
                             </button>
@@ -299,21 +300,21 @@ export function Editor() {
                               <div className="flex">
                                 {MESES.map((_, mi)=>{
                                   const c = map.get(`${fila.id}-${y}-${mi+1}`)
-                                  if(!c) return <span key={mi} className="flex-1 grid place-items-center py-2" title="Cargando..."><input type="checkbox" disabled aria-label="Cargando mes" className="w-4 h-4 accent-[var(--accent)] opacity-60" /></span>
-                                  return <label key={mi} className="flex-1 grid place-items-center py-2 cursor-pointer hover:bg-[var(--accent-soft)]" title={c.revisado ? "Desmarcar" : "Marcar"}>
-                                    <input type="checkbox" aria-label={`Mes ${mi + 1} de ${y}`} checked={!!c.revisado} onChange={()=>toggle.mutate(c)} className="w-4 h-4 accent-[var(--accent)] cursor-pointer" />
+                                  if(!c) return <span key={mi} className="flex-1 grid place-items-center py-2" title="Cargando..."><input type="checkbox" disabled aria-label="Cargando mes" className="w-4 h-4 accent-[var(--sheet-accent)] opacity-60" /></span>
+                                  return <label key={mi} className="flex-1 grid place-items-center py-2 cursor-pointer hover:bg-[var(--sheet-soft)]" title={c.revisado ? "Desmarcar" : "Marcar"}>
+                                    <input type="checkbox" aria-label={`Mes ${mi + 1} de ${y}`} checked={!!c.revisado} onChange={()=>toggle.mutate(c)} className="w-4 h-4 accent-[var(--sheet-accent)] cursor-pointer" />
                                   </label>
                                 })}
                               </div>
                             </td>
                           ))}
                           {cfg.visible_fields.responsable && (
-                            <td className="p-0 min-w-[90px] border-l border-[var(--accent-border)]">
+                            <td className="p-0 min-w-[90px] border-l border-[var(--sheet-border)]">
                               <FilaTextCell field="responsable" fila={fila} onSave={v=>updateFila.mutate({ fid: fila.id, patch:{ responsable: v } })} />
                             </td>
                           )}
                           {cfg.visible_fields.observaciones && (
-                            <td className="p-0 min-w-[140px] border-l border-[var(--accent-border)]">
+                            <td className="p-0 min-w-[140px] border-l border-[var(--sheet-border)]">
                               <FilaTextCell field="observacion" fila={fila} onSave={v=>updateFila.mutate({ fid: fila.id, patch:{ observacion: v } })} />
                             </td>
                           )}
@@ -323,8 +324,8 @@ export function Editor() {
                   </tbody>
                 </table>
               </div>
-              <div className="p-3 border-t border-[var(--accent-border)]">
-                <Button onClick={()=>addFila.mutate({ nombre: `Fila ${filas.length+1}` })} className="w-full h-8 rounded-lg border border-dashed border-[var(--accent-border)] bg-[var(--accent-soft)] hover:bg-[var(--accent-soft)] text-[var(--accent)] text-xs font-medium gap-1.5"><Plus size={13}/> Agregar fila</Button>
+              <div className="p-3 border-t border-[var(--sheet-border)]">
+                <Button onClick={()=>addFila.mutate({ nombre: `Fila ${filas.length+1}` })} className="w-full h-8 rounded-lg border border-dashed border-[var(--sheet-border)] bg-[var(--sheet-soft)] hover:brightness-95 text-[var(--sheet-accent)] text-xs font-medium gap-1.5"><Plus size={13}/> Agregar fila</Button>
               </div>
             </div>
           </div>
@@ -395,13 +396,19 @@ export function Editor() {
               <span className="text-xs text-[var(--text-dim)] truncate">{personalOpts.join(", ")}</span>
             </div>
             <div className="flex justify-between text-xs"><span className="text-[var(--text-dim)]">Total</span><span className="text-[var(--text)] font-medium">{filas.length} · {years.length} años</span></div>
+            <div className="border-t border-[var(--border)] pt-2 space-y-2">
+              <div className="text-[10px] text-[var(--text-dim)]">Columnas visibles</div>
+              <label className="flex items-center justify-between text-xs text-[var(--text-dim)] cursor-pointer">Responsable<input type="checkbox" checked={cfg.visible_fields.responsable} onChange={e=>cfg.set({visible_fields:{...cfg.visible_fields,responsable:e.target.checked}})} className="w-4 h-4 accent-[var(--sheet-accent)] cursor-pointer" /></label>
+              <label className="flex items-center justify-between text-xs text-[var(--text-dim)] cursor-pointer">Observaciones<input type="checkbox" checked={cfg.visible_fields.observaciones} onChange={e=>cfg.set({visible_fields:{...cfg.visible_fields,observaciones:e.target.checked}})} className="w-4 h-4 accent-[var(--sheet-accent)] cursor-pointer" /></label>
+            </div>
           </div>
           </>
           ) : (
           <>
           <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-3 space-y-3">
             <div className="text-[12px] font-medium text-[var(--text)] flex items-center gap-1.5"><Palette size={12}/> Estilos</div>
-            <div className="flex items-center justify-between"><span className="text-[11px] text-[var(--text-dim)]">Color principal</span><div className="flex items-center gap-1.5 bg-[var(--bg)] border border-[var(--border)] rounded-lg px-2 py-1 w-[148px] justify-between relative"><span className="w-4 h-4 rounded" style={{background: cfg.primary_color}}/><span className="text-[11px] text-[var(--text)]">{cfg.primary_color}</span><input type="color" aria-label="Color principal personalizado" value={cfg.primary_color} onChange={e=>cfg.set({primary_color:e.target.value})} className="absolute inset-0 opacity-0 cursor-pointer" /></div></div>
+            <div className="flex items-center justify-between"><span className="text-[11px] text-[var(--text-dim)]">Color de la hoja</span><Button onClick={()=>cfg.set({primary_color:""})} aria-pressed={!cfg.primary_color || ["#6366f1","#EC4899","#ec4899"].includes(cfg.primary_color)} title="Seguir el acento del tema" className="h-6 px-2.5 rounded-full text-[11px] bg-[var(--surface-2)] text-[var(--text-dim)] hover:text-[var(--text)] border border-[var(--border)]">Auto</Button></div>
+            <div className="flex items-center justify-between"><span className="text-[11px] text-[var(--text-dim)]">Personalizado</span><div className="flex items-center gap-1.5 bg-[var(--bg)] border border-[var(--border)] rounded-lg px-2 py-1 w-[148px] justify-between relative"><span className="w-4 h-4 rounded" style={{background: cfg.primary_color || "var(--accent)"}}/><span className="text-[11px] text-[var(--text)]">{cfg.primary_color || "Tema"}</span><input type="color" aria-label="Color personalizado de la hoja" value={cfg.primary_color || "#EC4899"} onChange={e=>cfg.set({primary_color:e.target.value})} className="absolute inset-0 opacity-0 cursor-pointer" /></div></div>
             <div className="flex gap-1.5 flex-wrap">
               {["#EC4899","#8b5cf6","#06b6d4","#10b981","#f59e0b","#ef4444"].map(c=>(
                 <button key={c} title={c} aria-label={`Color ${c}`} aria-pressed={cfg.primary_color===c} onClick={()=>cfg.set({primary_color:c})} className="w-7 h-7 rounded-full border-2" style={{background:c, borderColor: cfg.primary_color===c ? "white" : "var(--border)", boxShadow: cfg.primary_color===c ? "0 0 0 2px var(--accent)" : "none"}}/>
@@ -416,12 +423,12 @@ export function Editor() {
                 <option value="compact">Compacta</option><option value="normal">Normal</option><option value="comfortable">Cómoda</option>
               </select>
             </label>
-            <label className="flex items-center justify-between text-xs text-[var(--text-dim)]">Resumen<input type="checkbox" checked={cfg.show_summary} onChange={e=>cfg.set({show_summary:e.target.checked})} className="accent-[var(--accent)]" /></label>
+            <label className="flex items-center justify-between text-xs text-[var(--text-dim)]">Resumen<input type="checkbox" checked={cfg.show_summary} onChange={e=>cfg.set({show_summary:e.target.checked})} className="accent-[var(--sheet-accent)]" /></label>
           </div>
 
-          <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-3">
-            <div className="text-[12px] font-medium text-[var(--text)] mb-2">Fondo cabecera</div>
-            <div className="flex items-center gap-2"><span className="w-6 h-6 rounded border" style={{background: cfg.table_header_bg}}/><input type="color" aria-label="Color de fondo de cabecera" value={cfg.table_header_bg} onChange={e=>cfg.set({table_header_bg:e.target.value})} className="flex-1 h-8 bg-transparent" /><span className="text-xs text-[var(--text-dim)]">{cfg.table_header_bg}</span></div>
+          <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-3 space-y-2">
+            <div className="text-[12px] font-medium text-[var(--text)] flex items-center justify-between">Fondo cabecera<Button onClick={()=>cfg.set({table_header_bg:""})} aria-pressed={!headBg} title="Seguir el color de la hoja" className="h-6 px-2.5 rounded-full text-[11px] bg-[var(--surface-2)] text-[var(--text-dim)] hover:text-[var(--text)] border border-[var(--border)]">Auto</Button></div>
+            <div className="flex items-center gap-2"><span className="w-6 h-6 rounded border" style={{background: headBg || "var(--sheet-soft)"}}/><input type="color" aria-label="Color de fondo de cabecera" value={headBg || "#EC4899"} onChange={e=>cfg.set({table_header_bg:e.target.value})} className="flex-1 h-8 bg-transparent cursor-pointer" /><span className="text-xs text-[var(--text-dim)]">{headBg || "Auto"}</span></div>
           </div>
           </>
           )}
@@ -439,7 +446,7 @@ export function Editor() {
             <p className="text-xs text-[#64748b] mb-3">Cada fila necesita una empresa registrada. Puedes seguir editando los meses libremente.</p>
             <ul className="max-h-[220px] overflow-auto space-y-1.5 mb-4">
               {validAlert.map((m:any)=>(
-                <li key={m.id} className="text-xs px-3 py-2 rounded-lg bg-[var(--accent-soft)] border border-[var(--accent-border)]">
+                <li key={m.id} className="text-xs px-3 py-2 rounded-lg bg-[var(--sheet-soft)] border border-[var(--sheet-border)]">
                   Fila {m.fila} — “{m.nombre}” sin empresa
                 </li>
               ))}
