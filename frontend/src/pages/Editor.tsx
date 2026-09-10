@@ -34,7 +34,7 @@ function EmpresaPicker({ fila, empresas, onSelect, onClose }: { fila: any; empre
 function ObsCell({ celda, onSave }: { celda: any; onSave: (v: string) => void }) {
   const [v, setV] = useState(celda?.observacion ?? "")
   useEffect(()=> setV(celda?.observacion ?? ""), [celda?.observacion])
-  return <input value={v} onChange={e=>setV(e.target.value)} onBlur={()=>{ if(v!== (celda?.observacion ?? "")) onSave(v)}} onKeyDown={e=>{ if(e.key==="Enter") (e.target as HTMLInputElement).blur() }} placeholder="—" className="w-full h-7 px-2 text-xs border border-transparent hover:border-[#f9c2dd] focus:border-[#EC4899]/40 rounded focus:outline-none bg-transparent text-[#1e293b]" />
+  return <input value={v} onChange={e=>setV(e.target.value)} onBlur={()=>{ if(v!== (celda?.observacion ?? "")) onSave(v)}} onKeyDown={e=>{ if(e.key==="Enter") (e.target as HTMLInputElement).blur() }} placeholder="—" className="w-full min-w-0 max-w-full h-7 px-2 text-xs border border-transparent hover:border-[#f9c2dd] focus:border-[#EC4899]/40 rounded focus:outline-none bg-transparent text-[#1e293b]" />
 }
 
 export function Editor() {
@@ -82,7 +82,7 @@ export function Editor() {
           </div>
         </div>
         <div className="flex-1 p-6 flex justify-center overflow-auto bg-[#0f1117]">
-          <div className="w-[900px] min-h-[600px] bg-white shadow-[0_20px_60px_rgba(0,0,0,0.45)] rounded-lg overflow-hidden shrink-0">
+          <div className="w-[900px] min-h-[1273px] bg-white shadow-[0_20px_60px_rgba(0,0,0,0.45)] rounded-lg overflow-hidden shrink-0">
             <div className="p-6">
               <div className="flex items-center gap-2 mb-3 text-xs">
                 <span className="px-2 py-1 rounded bg-[#fdf2f8] border border-[#fce7f3] text-[#831843]">{archivo.tipo_revision}</span>
@@ -96,7 +96,7 @@ export function Editor() {
                 </div>
               )}
               <div className="overflow-auto">
-                <table className={`w-full text-xs border-collapse table-${cfg.table_density}`}>
+                <table className={`w-full text-xs border-collapse table-${cfg.table_density}`} style={{ minWidth: 548 + years.length * 12 * 20 }}>
                   <thead>
                     <tr className="bg-[#fdf2f8] border-b border-[#fce7f3]">
                       <th rowSpan={2} className="p-2 w-[44px] text-left text-[#831843] font-semibold align-middle">N.</th>
