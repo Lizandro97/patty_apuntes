@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom"
-import { Home, FileText, Building2, Files, Settings, LogOut, Sun, Eye, Undo2, Redo2, Download } from "lucide-react"
+import { Home, FileText, Building2, Files, Settings, LogOut, Sun, Eye, Undo2, Redo2, Download, Leaf } from "lucide-react"
 import { useAuthStore } from "@/stores/auth"
 import { useEditorHeaderStore } from "@/stores/editorHeader"
 import { useState } from "react"
@@ -57,9 +57,8 @@ function Topbar() {
     <header className="h-[52px] flex items-center justify-between px-3 bg-[#0f1117] border-b border-[#242836] shrink-0 no-print">
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2.5">
-          <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#EC4899] to-[#8b5cf6] flex items-center justify-center text-white text-xs font-bold">✿</span>
+          <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#38bdf8] to-[#6366f1] flex items-center justify-center text-white"><Leaf size={15} strokeWidth={2}/></span>
           <span className="font-semibold text-white text-[15px] tracking-tight">Patty apuntes</span>
-          <span className="hidden sm:inline text-[11px] text-[#8b8fa3]">Tus números, en orden</span>
         </div>
         {isEditor && hdr.archivoId && (
           <>

@@ -31,6 +31,12 @@ function EmpresaPicker({ fila, empresas, onSelect, onClose }: { fila: any; empre
   )
 }
 
+function ObsCell({ celda, onSave }: { celda: any; onSave: (v: string) => void }) {
+  const [v, setV] = useState(celda?.observacion ?? "")
+  useEffect(()=> setV(celda?.observacion ?? ""), [celda?.observacion])
+  return <input value={v} onChange={e=>setV(e.target.value)} onBlur={()=>{ if(v!== (celda?.observacion ?? "")) onSave(v)}} onKeyDown={e=>{ if(e.key==="Enter") (e.target as HTMLInputElement).blur() }} placeholder="—" className="w-full h-7 px-2 text-xs border border-transparent hover:border-[#f9c2dd] focus:border-[#EC4899]/40 rounded focus:outline-none bg-transparent text-[#1e293b]" />
+}
+
 export function Editor() {
   const { id } = useParams()
   const qc = useQueryClient()
@@ -93,17 +99,22 @@ export function Editor() {
                 <table className={`w-full text-xs border-collapse table-${cfg.table_density}`}>
                   <thead>
                     <tr className="bg-[#fdf2f8] border-b border-[#fce7f3]">
-                      <th className="p-2 w-[44px] text-left text-[#831843] font-semibold">N.</th>
-                      <th className="p-2 text-left text-[#831843] font-semibold min-w-[160px]">Empresa</th>
+                      <th rowSpan={2} className="p-2 w-[44px] text-left text-[#831843] font-semibold align-middle">N.</th>
+                      <th rowSpan={2} className="p-2 text-left text-[#831843] font-semibold min-w-[160px] align-middle">Empresa</th>
+                      <th colSpan={years.length * 12} className="p-2 text-center text-[#831843] font-semibold text-[12px] border-x border-[#fce7f3]">Año / Meses</th>
+                      {cfg.visible_fields.responsable && <th rowSpan={2} className="p-2 text-center text-[#831843] font-semibold align-middle min-w-[90px]">Responsable</th>}
+                      {cfg.visible_fields.observaciones && <th rowSpan={2} className="p-2 text-center text-[#831843] font-semibold align-middle min-w-[140px]">Observaciones</th>}
+                      <th rowSpan={2} className="p-2 w-[60px] align-middle"></th>
+                    </tr>
+                    <tr className="bg-[#fdf2f8] border-b border-[#fce7f3]">
                       {years.map(y=>(
-                        <th key={y} colSpan={12} className="p-1 text-center text-[#831843] font-semibold text-[11px]">{y}<div className="flex text-[9px] font-normal text-[#9d174d]/60">{MESES.map(m=> <span key={m} className="flex-1 text-center">{m}</span>)}</div></th>
+                        <th key={y} colSpan={12} className="p-1 text-center text-[#831843] font-semibold text-[11px] border-x border-[#fce7f3]">{y}<div className="flex text-[9px] font-normal text-[#9d174d]/60">{MESES.map(m=> <span key={m} className="flex-1 text-center">{m}</span>)}</div></th>
                       ))}
-                      <th className="p-2 w-[60px]"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {filas.length===0 ? (
-                      <tr><td colSpan={years.length*12 + 3} className="p-12 text-center text-[#94a3b8]"><div className="text-sm">Tu papel está en blanco</div></td></tr>
+                      <tr><td colSpan={2 + years.length*12 + (cfg.visible_fields.responsable?1:0) + (cfg.visible_fields.observaciones?1:0) + 1} className="p-12 text-center text-[#94a3b8]"><div className="text-sm">Tu papel está en blanco</div></td></tr>
                     ) : (
                       filas.slice().sort((a:any,b:any)=>a.orden-b.orden).map((fila:any, idx:number)=>(
                         <tr key={fila.id} className="border-t border-[#fce7f3] hover:bg-[#fdf2f8]/40">
@@ -127,6 +138,29 @@ export function Editor() {
                               </div>
                             </td>
                           ))}
+                          {cfg.visible_fields.responsable && (
+                            <td className="p-1 border-l border-[#fce7f3]">
+                              {(() => {
+                                const c0 = fila.empresa_id ? map.get(`${fila.empresa_id}-${years[0]}-1`) : null
+                                if(!c0) return <span className="text-[11px] text-[#e2e8f0]">—</span>
+                                return (
+                                  <select value={c0.responsable ?? ""} onChange={e=>updateCelda.mutate({ cid: c0.id, patch:{ responsable: e.target.value } })} className="text-[11px] border border-[#fce7f3] rounded px-1 py-1 w-full bg-white text-[#1e293b] focus:border-[#EC4899]/40 focus:outline-none">
+                                    <option value="">—</option>
+                                    {personalOpts.map(p=><option key={p} value={p}>{p}</option>)}
+                                  </select>
+                                )
+                              })()}
+                            </td>
+                          )}
+                          {cfg.visible_fields.observaciones && (
+                            <td className="p-0 min-w-[140px] border-l border-[#fce7f3]">
+                              {(() => {
+                                const c0 = fila.empresa_id ? map.get(`${fila.empresa_id}-${years[0]}-1`) : null
+                                if(!c0) return <span className="text-[11px] text-[#e2e8f0] px-2">—</span>
+                                return <ObsCell celda={c0} onSave={v=>updateCelda.mutate({ cid: c0.id, patch:{ observacion: v } })} />
+                              })()}
+                            </td>
+                          )}
                           <td className="p-2 text-center"><button onClick={()=>deleteFila.mutate(fila.id)} className="w-6 h-6 rounded hover:bg-red-50 text-[#94a3b8] hover:text-red-600"><Trash2 size={12}/></button></td>
                         </tr>
                       ))
