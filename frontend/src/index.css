@@ -1,0 +1,31 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: #EC4899;
+  --table-header-bg: #1e2230;
+  --grid-cols: 3;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3a3e54 transparent;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #0f1117;
+  color: #e2e4ed;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.table-compact td, .table-compact th { padding: 4px 8px; }
+.table-normal td, .table-normal th { padding: 8px 12px; }
+.table-comfortable td, .table-comfortable th { padding: 12px 16px; }

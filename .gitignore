@@ -1,0 +1,31 @@
+# Deps
+node_modules/
+frontend/node_modules/
+
+# Build
+frontend/dist/
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+backend/.venv/
+.ruff_cache/
+backend/.ruff_cache/
+
+# DB local
+*.db
+*.sqlite
+*.sqlite3
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Logs / OS
+*.log
+.DS_Store
+.nohup.out
+nohup.out
