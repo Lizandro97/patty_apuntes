@@ -335,15 +335,19 @@ export function Editor() {
       <div className={`${rightCollapsed ? "w-[56px]" : "w-[320px]"} bg-[var(--bg)] border-l border-[var(--border)] flex flex-col shrink-0 overflow-hidden hidden xl:flex transition-all duration-300`}>
         {rightCollapsed ? (
           <div className="flex flex-col items-center gap-2 py-3">
-            <button onClick={()=>setRightCollapsed(false)} title="Expandir panel" className="w-9 h-9 rounded-xl hover:bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--text)] transition">
-              <PanelRightOpen size={16}/>
+            <button onClick={()=>setRightCollapsed(false)} title={`Expandir panel (${panelTab === "tabla" ? "Tabla" : "Diseño"})`} aria-label="Expandir panel" className="group/panel relative w-9 h-9 rounded-xl hover:bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--text)] transition">
+              {panelTab === "tabla" ? <Table2 size={16} className="transition-opacity duration-150 group-hover/panel:opacity-0" /> : <Palette size={16} className="transition-opacity duration-150 group-hover/panel:opacity-0" />}
+              <PanelRightOpen size={16} className="absolute inset-0 m-auto opacity-0 group-hover/panel:opacity-100 transition-opacity duration-150" />
             </button>
-            <button onClick={()=>{ setPanelTab("tabla"); setRightCollapsed(false) }} title="Tabla" className={`w-9 h-9 rounded-xl flex items-center justify-center transition ${panelTab==="tabla" ? "bg-[var(--surface-2)] text-[var(--text)] border border-[var(--accent-border)]" : "text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface)] border border-transparent"}`}>
-              <Table2 size={16}/>
-            </button>
-            <button onClick={()=>{ setPanelTab("diseno"); setRightCollapsed(false) }} title="Diseño" className={`w-9 h-9 rounded-xl flex items-center justify-center transition ${panelTab==="diseno" ? "bg-[var(--surface-2)] text-[var(--text)] border border-[var(--accent-border)]" : "text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface)] border border-transparent"}`}>
-              <Palette size={16}/>
-            </button>
+            {panelTab === "tabla" ? (
+              <button onClick={()=>{ setPanelTab("diseno"); setRightCollapsed(false) }} title="Diseño" aria-label="Ir a Diseño" className="w-9 h-9 rounded-xl flex items-center justify-center transition text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface)] border border-transparent">
+                <Palette size={16}/>
+              </button>
+            ) : (
+              <button onClick={()=>{ setPanelTab("tabla"); setRightCollapsed(false) }} title="Tabla" aria-label="Ir a Tabla" className="w-9 h-9 rounded-xl flex items-center justify-center transition text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface)] border border-transparent">
+                <Table2 size={16}/>
+              </button>
+            )}
           </div>
         ) : (
         <>

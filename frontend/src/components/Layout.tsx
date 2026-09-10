@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom"
-import { Home, FileText, Building2, Files, Settings, LogOut, Sun, Leaf, Menu, ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import { Home, FileText, Building2, Files, Settings, LogOut, Sun, Leaf, Menu, ChevronDown, PanelLeftClose, PanelLeftOpen, Pencil } from "lucide-react"
 import { useAuthStore } from "@/stores/auth"
 import { useEditorHeaderStore } from "@/stores/editorHeader"
 import { useUiStore } from "@/stores/ui"
@@ -143,27 +143,29 @@ function Sidebar() {
         )}
       >
         <div className={cn("flex items-center gap-2.5 px-4 h-[60px] shrink-0", collapsed && "lg:justify-center lg:px-0")}>
-          <span className="w-8 h-8 shrink-0 rounded-lg bg-gradient-to-br from-[#38bdf8] to-[#6366f1] flex items-center justify-center text-white"><Leaf size={16} strokeWidth={2}/></span>
-          <span className={cn("font-semibold text-[var(--text)] text-[15px] tracking-tight truncate", collapsed && "lg:hidden")}>Patty apuntes</span>
           <button
-            onClick={toggleCollapsed}
-            title={collapsed ? "Expandir menú" : "Comprimir menú"}
-            aria-label={collapsed ? "Expandir menú" : "Comprimir menú"}
-            className={cn("ml-auto w-7 h-7 hidden lg:flex items-center justify-center rounded-lg text-[var(--text-dim)] hover:bg-[var(--surface)] hover:text-[var(--text)] transition", collapsed && "lg:hidden")}
+            onClick={() => { if (collapsed && window.matchMedia("(min-width: 1024px)").matches) toggleCollapsed() }}
+            title={collapsed ? "Expandir menú" : undefined}
+            aria-label={collapsed ? "Expandir menú" : "Patty apuntes"}
+            className={cn("group/logo flex items-center gap-2.5 rounded-xl transition", collapsed && "lg:cursor-pointer")}
           >
-            <PanelLeftClose size={15} />
+            <span className="w-8 h-8 shrink-0 rounded-lg bg-gradient-to-br from-[#38bdf8] to-[#6366f1] flex items-center justify-center text-white relative overflow-hidden">
+              <Leaf size={16} strokeWidth={2} className={cn("absolute inset-0 m-auto transition-opacity duration-150", collapsed && "lg:group-hover/logo:opacity-0")} />
+              {collapsed && <PanelLeftOpen size={16} className="absolute inset-0 m-auto opacity-0 lg:group-hover/logo:opacity-100 transition-opacity duration-150" />}
+            </span>
+            <span className={cn("font-semibold text-[var(--text)] text-[15px] tracking-tight truncate", collapsed && "lg:hidden")}>Patty apuntes</span>
           </button>
+          {!collapsed && (
+            <button
+              onClick={toggleCollapsed}
+              title="Comprimir menú"
+              aria-label="Comprimir menú"
+              className="ml-auto w-7 h-7 hidden lg:flex items-center justify-center rounded-lg text-[var(--text-dim)] hover:bg-[var(--surface)] hover:text-[var(--text)] transition"
+            >
+              <PanelLeftClose size={15} />
+            </button>
+          )}
         </div>
-        {collapsed && (
-          <button
-            onClick={toggleCollapsed}
-            title="Expandir menú"
-            aria-label="Expandir menú"
-            className="hidden lg:flex mx-auto w-9 h-9 items-center justify-center rounded-xl text-[var(--text-dim)] hover:bg-[var(--surface)] hover:text-[var(--text)] transition mb-1"
-          >
-            <PanelLeftOpen size={15} />
-          </button>
-        )}
         <nav className={cn("flex-1 flex flex-col gap-0.5 px-3 overflow-y-auto", collapsed && "lg:px-2 lg:items-center")}>
           {items.map((it) => {
             const Icon = it.icon
@@ -210,7 +212,8 @@ function Topbar() {
       </button>
       <div className={`flex-1 flex justify-center min-w-0 px-2 transition-[padding] duration-300 ${rightOpen ? "xl:pr-[320px]" : "xl:pr-[56px]"}`}>
         {hdr.archivoId && (
-          <span className="hidden md:flex items-center gap-2.5 min-w-0">
+          <span className="hidden md:flex items-center gap-2 rounded-lg bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--border-strong)] focus-within:border-[var(--accent)] pl-2.5 pr-1 py-[3px] w-[340px] max-w-[44vw] transition shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)]">
+            <Pencil size={13} className="text-[var(--text-dim)] shrink-0" aria-hidden />
             <input
               value={hdr.titulo}
               onChange={e=>{ hdr.set({ titulo: e.target.value }); hdr.setDirty(true) }}
@@ -218,7 +221,7 @@ function Topbar() {
               onKeyDown={e=>{ if(e.key==="Enter") (e.target as HTMLInputElement).blur() }}
               placeholder="Nombre del archivo"
               aria-label="Nombre del archivo"
-              className="bg-transparent border border-transparent hover:border-[var(--border)] focus:border-[var(--accent)] rounded-lg px-3 py-[5px] text-[14px] font-medium text-[var(--text)] text-center w-[280px] max-w-[38vw] truncate focus:outline-none placeholder:text-[var(--text-dim)] placeholder:font-normal transition"
+              className="flex-1 min-w-0 bg-transparent px-1 py-[3px] text-[14px] font-medium text-[var(--text)] text-left truncate focus:outline-none placeholder:text-[var(--text-dim)] placeholder:font-normal cursor-text"
             />
             <span className="hidden lg:flex items-center gap-1.5 text-[12px] text-[var(--text-dim)] shrink-0">
               <span className={`w-2 h-2 rounded-full inline-block ${hdr.dirty ? "bg-amber-500" : "bg-emerald-500"}`} />
