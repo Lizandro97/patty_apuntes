@@ -1,13 +1,13 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ArchivoCreate(BaseModel):
     titulo: str
-    tipo_revision: str = "Archivadores de compras"
-    periodo_inicio: int = 2021
-    periodo_fin: int = 2025
+    tipo_revision: str = ""
+    periodo_inicio: int = Field(default_factory=lambda: date.today().year)
+    periodo_fin: int = Field(default_factory=lambda: date.today().year)
     personal_count: int | None = 2
 
 
@@ -40,6 +40,8 @@ class ArchivoFilaOut(BaseModel):
     empresa_id: str | None
     nombre_snapshot: str
     orden: int
+    responsable: str | None = None
+    observacion: str | None = None
 
     class Config:
         from_attributes = True
@@ -54,12 +56,15 @@ class ArchivoFilaUpdate(BaseModel):
     empresa_id: str | None = None
     nombre: str | None = None
     orden: int | None = None
+    responsable: str | None = None
+    observacion: str | None = None
 
 
 class CeldaOut(BaseModel):
     id: str
     archivo_id: str
-    empresa_id: str
+    fila_id: str
+    empresa_id: str | None = None
     anio: int
     mes: int
     revisado: bool

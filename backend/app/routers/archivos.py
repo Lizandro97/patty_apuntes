@@ -52,14 +52,13 @@ def _ensure_filas(db: Session, archivo: Archivo) -> list[ArchivoFila]:
     )
     if filas:
         return filas
-    # init from empresas if no filas
-    empresas = db.query(Empresa).filter(Empresa.user_id == archivo.user_id).all()
-    for idx, emp in enumerate(empresas):
+    # default: 5 empty rows, no data — months work per row, empresa picked later
+    for idx in range(5):
         db.add(
             ArchivoFila(
                 archivo_id=archivo.id,
-                empresa_id=emp.id,
-                nombre_snapshot=emp.nombre,
+                empresa_id=None,
+                nombre_snapshot="",
                 orden=idx,
             )
         )
@@ -73,14 +72,11 @@ def _ensure_filas(db: Session, archivo: Archivo) -> list[ArchivoFila]:
 
 
 def _ensure_celdas(db: Session, archivo: Archivo, filas: list[ArchivoFila]):
-    # create missing celdas per fila/empresa_id
+    # create missing celdas per fila — months work with or without empresa
     for fila in filas:
-        if not fila.empresa_id:
-            continue
-        # simpler: check per fila existence via count
         cnt = (
             db.query(func.count(Celda.id))
-            .filter(Celda.archivo_id == archivo.id, Celda.empresa_id == fila.empresa_id)
+            .filter(Celda.archivo_id == archivo.id, Celda.fila_id == fila.id)
             .scalar()
             or 0
         )
@@ -92,19 +88,33 @@ def _ensure_celdas(db: Session, archivo: Archivo, filas: list[ArchivoFila]):
                         not db.query(Celda)
                         .filter(
                             Celda.archivo_id == archivo.id,
-                            Celda.empresa_id == fila.empresa_id,
+                            Celda.fila_id == fila.id,
                             Celda.anio == y,
                             Celda.mes == m,
                         )
                         .first()
                     ):
                         db.add(
-                            Celda(archivo_id=archivo.id, empresa_id=fila.empresa_id, anio=y, mes=m)
+                            Celda(
+                                archivo_id=archivo.id,
+                                fila_id=fila.id,
+                                empresa_id=fila.empresa_id,
+                                anio=y,
+                                mes=m,
+                            )
                         )
         else:
             for y in range(archivo.periodo_inicio, archivo.periodo_fin + 1):
                 for m in range(1, 13):
-                    db.add(Celda(archivo_id=archivo.id, empresa_id=fila.empresa_id, anio=y, mes=m))
+                    db.add(
+                        Celda(
+                            archivo_id=archivo.id,
+                            fila_id=fila.id,
+                            empresa_id=fila.empresa_id,
+                            anio=y,
+                            mes=m,
+                        )
+                    )
     db.commit()
 
 
@@ -117,8 +127,6 @@ def _sync_escala(db: Session, archivo: Archivo, old_start: int, old_end: int):
     # add missing years for each fila
     filas = db.query(ArchivoFila).filter(ArchivoFila.archivo_id == archivo.id).all()
     for fila in filas:
-        if not fila.empresa_id:
-            continue
         for y in range(archivo.periodo_inicio, archivo.periodo_fin + 1):
             if y < old_start or y > old_end:
                 for m in range(1, 13):
@@ -126,14 +134,20 @@ def _sync_escala(db: Session, archivo: Archivo, old_start: int, old_end: int):
                         not db.query(Celda)
                         .filter(
                             Celda.archivo_id == archivo.id,
-                            Celda.empresa_id == fila.empresa_id,
+                            Celda.fila_id == fila.id,
                             Celda.anio == y,
                             Celda.mes == m,
                         )
                         .first()
                     ):
                         db.add(
-                            Celda(archivo_id=archivo.id, empresa_id=fila.empresa_id, anio=y, mes=m)
+                            Celda(
+                                archivo_id=archivo.id,
+                                fila_id=fila.id,
+                                empresa_id=fila.empresa_id,
+                                anio=y,
+                                mes=m,
+                            )
                         )
     db.commit()
 
@@ -254,23 +268,38 @@ def duplicate(aid: str, db: Session = Depends(get_db), user: User = Depends(get_
             empresa_id=f.empresa_id,
             nombre_snapshot=f.nombre_snapshot,
             orden=f.orden,
+            responsable=f.responsable,
+            observacion=f.observacion,
         )
         db.add(nf)
     db.commit()
-    celdas = db.query(Celda).filter(Celda.archivo_id == orig.id).all()
-    for c in celdas:
-        db.add(
-            Celda(
-                archivo_id=a.id,
-                empresa_id=c.empresa_id,
-                anio=c.anio,
-                mes=c.mes,
-                revisado=False,
-                responsable=c.responsable,
-                color=c.color,
-                style=c.style,
+    # copy each row with its own month cells (fresh revision: unchecked)
+    new_filas = (
+        db.query(ArchivoFila)
+        .filter(ArchivoFila.archivo_id == a.id)
+        .order_by(ArchivoFila.orden)
+        .all()
+    )
+    old_celdas = db.query(Celda).filter(Celda.archivo_id == orig.id).all()
+    old_by_fila: dict = {}
+    for c in old_celdas:
+        old_by_fila.setdefault(c.fila_id, []).append(c)
+    old_by_orden = {f.orden: f.id for f in filas}
+    for nf in new_filas:
+        for c in old_by_fila.get(old_by_orden.get(nf.orden), []):
+            db.add(
+                Celda(
+                    archivo_id=a.id,
+                    fila_id=nf.id,
+                    empresa_id=nf.empresa_id,
+                    anio=c.anio,
+                    mes=c.mes,
+                    revisado=False,
+                    responsable=c.responsable,
+                    color=c.color,
+                    style=c.style,
+                )
             )
-        )
     db.commit()
     _recalc_progreso(db, a.id)
     db.refresh(a)
@@ -320,11 +349,11 @@ def create_fila(
     db.add(fila)
     db.commit()
     db.refresh(fila)
-    if empresa_id:
-        for y in range(arch.periodo_inicio, arch.periodo_fin + 1):
-            for m in range(1, 13):
-                db.add(Celda(archivo_id=aid, empresa_id=empresa_id, anio=y, mes=m))
-        db.commit()
+    # every row gets its own month cells, with or without empresa
+    for y in range(arch.periodo_inicio, arch.periodo_fin + 1):
+        for m in range(1, 13):
+            db.add(Celda(archivo_id=aid, fila_id=fila.id, empresa_id=empresa_id, anio=y, mes=m))
+    db.commit()
     return fila
 
 
@@ -344,12 +373,12 @@ def update_fila(
     )
     if not fila:
         raise HTTPException(404, "Fila no encontrada")
-    old_empresa = fila.empresa_id
+    # empresa is an optional directory link: it only sets the label, never touches month cells
     if data.empresa_id is not None:
-        # allow clearing
         if data.empresa_id == "":
             fila.empresa_id = None
-            fila.nombre_snapshot = data.nombre or fila.nombre_snapshot
+            if data.nombre:
+                fila.nombre_snapshot = data.nombre.strip()
         else:
             emp = (
                 db.query(Empresa)
@@ -358,29 +387,20 @@ def update_fila(
             )
             if not emp:
                 raise HTTPException(404, "Empresa no encontrada")
-            # delete old celdas if empresa changed
-            if old_empresa and old_empresa != emp.id:
-                db.query(Celda).filter(
-                    Celda.archivo_id == aid, Celda.empresa_id == old_empresa
-                ).delete(synchronize_session=False)
             fila.empresa_id = emp.id
             fila.nombre_snapshot = emp.nombre
-            # ensure celdas for new empresa
-            cnt = (
-                db.query(func.count(Celda.id))
-                .filter(Celda.archivo_id == aid, Celda.empresa_id == emp.id)
-                .scalar()
-                or 0
-            )
-            if cnt == 0:
-                for y in range(arch.periodo_inicio, arch.periodo_fin + 1):
-                    for m in range(1, 13):
-                        db.add(Celda(archivo_id=aid, empresa_id=emp.id, anio=y, mes=m))
-    if data.nombre is not None and not data.empresa_id:
-        fila.nombre_snapshot = data.nombre.strip()
-        # if fila has empresa_id but user overrides nombre, keep snapshot sync? allow custom
+    elif data.nombre is not None:
+        # display label only — empresas must be pre-registered, never auto-created
+        nombre = data.nombre.strip()
+        if not nombre:
+            raise HTTPException(400, "Nombre vacío")
+        fila.nombre_snapshot = nombre
     if data.orden is not None:
         fila.orden = data.orden
+    if data.responsable is not None:
+        fila.responsable = data.responsable.strip() or None
+    if data.observacion is not None:
+        fila.observacion = data.observacion.strip() or None
     db.commit()
     db.refresh(fila)
     return fila
@@ -398,21 +418,10 @@ def delete_fila(
     )
     if not fila:
         raise HTTPException(404, "Fila no encontrada")
-    # optionally delete celdas linked to this empresa? keep if shared? delete only those tied to this fila's empresa that are not used by other filas with same empresa
-    if fila.empresa_id:
-        other = (
-            db.query(ArchivoFila)
-            .filter(
-                ArchivoFila.archivo_id == aid,
-                ArchivoFila.empresa_id == fila.empresa_id,
-                ArchivoFila.id != fid,
-            )
-            .first()
-        )
-        if not other:
-            db.query(Celda).filter(
-                Celda.archivo_id == aid, Celda.empresa_id == fila.empresa_id
-            ).delete(synchronize_session=False)
+    # month cells belong to the row: deleting it always removes its own cells
+    db.query(Celda).filter(Celda.archivo_id == aid, Celda.fila_id == fid).delete(
+        synchronize_session=False
+    )
     db.delete(fila)
     db.commit()
     # reindex orden
@@ -539,15 +548,14 @@ def stats(aid: str, db: Session = Depends(get_db), user: User = Depends(get_curr
         .scalar()
         or 0
     )
-    filas = db.query(ArchivoFila).filter(ArchivoFila.archivo_id == aid).all()
-    # if filas exist, count revisadas per fila
+    filas = _ensure_filas(db, arch)
+    _ensure_celdas(db, arch, filas)
+    # count fully-reviewed rows (every row counts, with or without empresa)
     revisadas = 0
     for fila in filas:
-        if not fila.empresa_id:
-            continue
         t = (
             db.query(func.count(Celda.id))
-            .filter(Celda.archivo_id == aid, Celda.empresa_id == fila.empresa_id)
+            .filter(Celda.archivo_id == aid, Celda.fila_id == fila.id)
             .scalar()
             or 0
         )
@@ -555,7 +563,7 @@ def stats(aid: str, db: Session = Depends(get_db), user: User = Depends(get_curr
             db.query(func.count(Celda.id))
             .filter(
                 Celda.archivo_id == aid,
-                Celda.empresa_id == fila.empresa_id,
+                Celda.fila_id == fila.id,
                 Celda.revisado.is_(True),
             )
             .scalar()
@@ -563,30 +571,7 @@ def stats(aid: str, db: Session = Depends(get_db), user: User = Depends(get_curr
         )
         if t > 0 and t == r:
             revisadas += 1
-    # fallback if no filas: use empresas
-    if not filas:
-        empresas = db.query(Empresa).filter(Empresa.user_id == user.id).all()
-        revisadas = 0
-        for emp in empresas:
-            t = (
-                db.query(func.count(Celda.id))
-                .filter(Celda.archivo_id == aid, Celda.empresa_id == emp.id)
-                .scalar()
-                or 0
-            )
-            r = (
-                db.query(func.count(Celda.id))
-                .filter(
-                    Celda.archivo_id == aid, Celda.empresa_id == emp.id, Celda.revisado.is_(True)
-                )
-                .scalar()
-                or 0
-            )
-            if t > 0 and t == r:
-                revisadas += 1
-        total_filas = len(empresas)
-    else:
-        total_filas = len([f for f in filas if f.empresa_id])
+    total_filas = len(filas)
     pendientes = total_filas - revisadas if total_filas else 0
     prog = int(rev * 100 / total) if total else 0
     return {
@@ -599,6 +584,17 @@ def stats(aid: str, db: Session = Depends(get_db), user: User = Depends(get_curr
     }
 
 
+def _missing_fields(filas: list[ArchivoFila]) -> list[dict]:
+    """Required fields for save/export: every row needs a registered empresa."""
+    missing = []
+    for idx, fila in enumerate(sorted(filas, key=lambda f: f.orden), 1):
+        if not fila.empresa_id:
+            missing.append(
+                {"fila": idx, "id": fila.id, "campo": "empresa", "nombre": fila.nombre_snapshot}
+            )
+    return missing
+
+
 @router.get("/{aid}/export")
 def export_file(
     aid: str,
@@ -609,25 +605,17 @@ def export_file(
     arch = db.query(Archivo).filter(Archivo.id == aid, Archivo.user_id == user.id).first()
     if not arch:
         raise HTTPException(404, "No encontrado")
-    filas = (
-        db.query(ArchivoFila)
-        .filter(ArchivoFila.archivo_id == aid)
-        .order_by(ArchivoFila.orden)
-        .all()
-    )
-    if not filas:
-        # fallback to empresas
-        empresas = (
-            db.query(Empresa).filter(Empresa.user_id == user.id).order_by(Empresa.nombre).all()
+    filas = _ensure_filas(db, arch)
+    _ensure_celdas(db, arch, filas)
+    filas = sorted(filas, key=lambda f: f.orden)
+    missing = _missing_fields(filas)
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail={"message": "Faltan campos requeridos para exportar", "faltantes": missing},
         )
-        filas = [
-            ArchivoFila(
-                id=e.id, archivo_id=aid, empresa_id=e.id, nombre_snapshot=e.nombre, orden=idx
-            )
-            for idx, e in enumerate(empresas)
-        ]  # type: ignore
     celdas = db.query(Celda).filter(Celda.archivo_id == aid).all()
-    cmap = {(c.empresa_id, c.anio, c.mes): c for c in celdas}
+    cmap = {(c.fila_id, c.anio, c.mes): c for c in celdas}
 
     if format == "excel":
         from openpyxl import Workbook
@@ -642,10 +630,14 @@ def export_file(
         border = Border(left=thin, right=thin, top=thin, bottom=thin)
         years = list(range(arch.periodo_inicio, arch.periodo_fin + 1))
         meses = ["E", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"]
+        ws.merge_cells(start_row=1, start_column=1, end_row=2, end_column=1)
+        ws.merge_cells(start_row=1, start_column=2, end_row=2, end_column=2)
         ws.cell(row=1, column=1, value="N.°").font = header_font
         ws.cell(row=1, column=1).fill = header_fill
+        ws.cell(row=1, column=1).alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=1, column=2, value="Empresa").font = header_font
         ws.cell(row=1, column=2).fill = header_fill
+        ws.cell(row=1, column=2).alignment = Alignment(horizontal="center", vertical="center")
         col = 3
         for y in years:
             ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 11)
@@ -654,8 +646,6 @@ def export_file(
             c.fill = header_fill
             c.alignment = Alignment(horizontal="center")
             col += 12
-        ws.cell(row=2, column=1).fill = header_fill
-        ws.cell(row=2, column=2).fill = header_fill
         col = 3
         for _ in years:
             for m in meses:
@@ -664,6 +654,13 @@ def export_file(
                 c.fill = header_fill
                 c.alignment = Alignment(horizontal="center")
                 col += 1
+        for hdr in ("Responsable", "Observaciones"):
+            ws.merge_cells(start_row=1, start_column=col, end_row=2, end_column=col)
+            c = ws.cell(row=1, column=col, value=hdr)
+            c.font = header_font
+            c.fill = header_fill
+            c.alignment = Alignment(horizontal="center", vertical="center")
+            col += 1
         r = 3
         for idx, fila in enumerate(filas, 1):
             ws.cell(row=r, column=1, value=idx).alignment = Alignment(horizontal="center")
@@ -671,21 +668,20 @@ def export_file(
             col = 3
             for y in years:
                 for m_idx in range(1, 13):
-                    # if fila has no empresa_id, empty
-                    if not fila.empresa_id:
-                        cell = ws.cell(row=r, column=col, value="—")
-                    else:
-                        c = cmap.get((fila.empresa_id, y, m_idx))
-                        v = "✓" if c and c.revisado else "☐"
-                        cell = ws.cell(row=r, column=col, value=v)
-                        cell.alignment = Alignment(horizontal="center")
-                        if c and c.revisado:
-                            colr = (c.color or "6366F1").lstrip("#")
-                            cell.font = Font(color=colr)
-                            # style bold
-                            if c.style and c.style.get("bold"):
-                                cell.font = Font(color=colr, bold=True)
+                    c = cmap.get((fila.id, y, m_idx))
+                    v = "☑" if c and c.revisado else "☐"
+                    cell = ws.cell(row=r, column=col, value=v)
+                    cell.alignment = Alignment(horizontal="center")
+                    if c and c.revisado:
+                        colr = (c.color or "6366F1").lstrip("#")
+                        cell.font = Font(color=colr)
+                        # style bold
+                        if c.style and c.style.get("bold"):
+                            cell.font = Font(color=colr, bold=True)
                     col += 1
+            ws.cell(row=r, column=col, value=fila.responsable or "")
+            ws.cell(row=r, column=col + 1, value=fila.observacion or "")
+            col += 2
             r += 1
         for row in ws.iter_rows(min_row=1, max_row=r - 1, max_col=col - 1):
             for cell in row:
@@ -720,7 +716,7 @@ def export_file(
         story = []
         story.append(
             Paragraph(
-                f"{arch.titulo} — {arch.periodo_inicio}-{arch.periodo_fin} | {len(filas)} Empresas",
+                f"{arch.titulo or 'Revisión sin título'} — {arch.periodo_inicio}-{arch.periodo_fin} | {len(filas)} Empresas",
                 styles["Title"],
             )
         )
@@ -731,18 +727,18 @@ def export_file(
         for y in years:
             for m in meses:
                 flat_header.append(f"{y}-{m}")
+        flat_header += ["Responsable", "Observaciones"]
         table_data = [flat_header]
         for idx, fila in enumerate(filas, 1):
             row = [str(idx), fila.nombre_snapshot]
             for y in years:
                 for m_idx in range(1, 13):
-                    if not fila.empresa_id:
-                        row.append("—")
-                    else:
-                        c = cmap.get((fila.empresa_id, y, m_idx))
-                        row.append("✓" if c and c.revisado else "☐")
+                    c = cmap.get((fila.id, y, m_idx))
+                    row.append("☑" if c and c.revisado else "☐")
+            row += [fila.responsable or "", fila.observacion or ""]
             table_data.append(row)
-        col_widths = [12 * mm, 30 * mm] + [8 * mm] * (len(flat_header) - 2)
+        n_meses = len(flat_header) - 4
+        col_widths = [12 * mm, 30 * mm] + [8 * mm] * n_meses + [20 * mm, 28 * mm]
         t = Table(table_data, colWidths=col_widths, repeatRows=1)
         style = TableStyle(
             [

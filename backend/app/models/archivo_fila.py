@@ -18,4 +18,6 @@ class ArchivoFila(Base):
     )
     nombre_snapshot: Mapped[str] = mapped_column(String)
     orden: Mapped[int] = mapped_column(Integer)
+    responsable: Mapped[str | None] = mapped_column(String, nullable=True)
+    observacion: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))

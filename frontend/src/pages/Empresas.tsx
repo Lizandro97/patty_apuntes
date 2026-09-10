@@ -10,35 +10,36 @@ export function Empresas() {
   const { data } = useQuery({ queryKey:["empresas"], queryFn: async()=> (await api.get("/empresas")).data })
   const [nombre,setNombre]=useState("")
   const [edit,setEdit]=useState<any>(null)
+  const [confirmId,setConfirmId]=useState<string|null>(null)
   const create = useMutation({ mutationFn: async()=> (await api.post("/empresas",{nombre})).data, onSuccess:()=> { qc.invalidateQueries({queryKey:["empresas"]}); setNombre("")} })
   const update = useMutation({ mutationFn: async()=> (await api.put(`/empresas/${edit.id}`,{nombre: edit.nombre})).data, onSuccess:()=> { qc.invalidateQueries({queryKey:["empresas"]}); setEdit(null)} })
   const del = useMutation({ mutationFn: async(id:string)=> await api.delete(`/empresas/${id}`), onSuccess:()=> qc.invalidateQueries({queryKey:["empresas"]}) })
   return (
-    <div className="flex-1 bg-[#0f1117] p-6 overflow-auto">
+    <div className="flex-1 bg-[var(--bg)] p-6 overflow-auto">
       <div className="max-w-[800px] mx-auto space-y-4">
-        <h1 className="text-[22px] font-bold text-white">Empresas</h1>
-        <p className="text-sm text-[#8b8fa3]">Catálogo para el Editor — nombres disponibles al elegir empresa</p>
-        <div className="bg-[#141722] border border-[#1e2230] rounded-xl p-4 flex gap-3">
-          <Input placeholder="Nombre de empresa" value={nombre} onChange={e=>setNombre(e.target.value)} className="bg-[#0f1117] border-[#2a2e3e] text-white placeholder:text-[#8b8fa3] h-10 rounded-lg" />
-          <Button onClick={()=>create.mutate()} disabled={!nombre.trim()} className="bg-[#EC4899] hover:bg-[#db2777] text-white rounded-lg h-10 px-5"><Plus size={16}/> Agregar</Button>
+        <h1 className="text-[22px] font-bold text-[var(--text)]">Empresas</h1>
+        <p className="text-sm text-[var(--text-dim)]">Catálogo para el Editor — nombres disponibles al elegir empresa</p>
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 flex gap-3">
+          <Input aria-label="Nombre de empresa" placeholder="Nombre de empresa" value={nombre} onChange={e=>setNombre(e.target.value)} className="bg-[var(--bg)] border-[var(--border)] text-[var(--text)] placeholder:text-[var(--text-dim)] h-10 rounded-lg" />
+          <Button onClick={()=>create.mutate()} disabled={!nombre.trim()} className="bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] rounded-lg h-10 px-5"><Plus size={16}/> Agregar</Button>
         </div>
-        <div className="bg-[#141722] border border-[#1e2230] rounded-xl overflow-hidden">
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl overflow-hidden">
           <table className="w-full text-sm">
-            <thead><tr className="bg-[#0f1117] border-b border-[#1e2230] text-left"><th className="p-3 text-xs font-medium text-[#8b8fa3] uppercase">N.º</th><th className="p-3 text-xs font-medium text-[#8b8fa3] uppercase">Empresa</th><th className="p-3 text-xs font-medium text-[#8b8fa3] uppercase">Creada</th><th className="p-3 text-xs font-medium text-[#8b8fa3] uppercase text-right">Acciones</th></tr></thead>
-            <tbody className="divide-y divide-[#1e2230]">
+            <thead><tr className="bg-[var(--bg)] border-b border-[var(--border)] text-left"><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase">N.º</th><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase">Empresa</th><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase">Creada</th><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase text-right">Acciones</th></tr></thead>
+            <tbody className="divide-y divide-[var(--border)]">
               {data?.map((e:any, i:number)=> (
-                <tr key={e.id} className="hover:bg-[#1e2230]/40">
-                  <td className="p-3 text-[#8b8fa3] font-mono text-xs">{i+1}</td>
-                  <td className="p-3 text-white">{edit?.id===e.id ? <Input value={edit.nombre} onChange={ev=>setEdit({...edit,nombre:ev.target.value})} className="h-8 bg-[#0f1117] border-[#2a2e3e] text-white" /> : e.nombre}</td>
-                  <td className="p-3 text-xs text-[#8b8fa3]">{new Date(e.created_at).toLocaleDateString()}</td>
+                <tr key={e.id} className="hover:bg-[var(--surface-2)]">
+                  <td className="p-3 text-[var(--text-dim)] font-mono text-xs">{i+1}</td>
+                  <td className="p-3 text-[var(--text)]">{edit?.id===e.id ? <Input aria-label="Editar nombre de empresa" value={edit.nombre} onChange={ev=>setEdit({...edit,nombre:ev.target.value})} className="h-8 bg-[var(--bg)] border-[var(--border)] text-[var(--text)]" /> : e.nombre}</td>
+                  <td className="p-3 text-xs text-[var(--text-dim)]">{new Date(e.created_at).toLocaleDateString()}</td>
                   <td className="p-3 flex gap-1.5 justify-end">
-                    {edit?.id===e.id ? (<><Button onClick={()=>update.mutate()} className="h-7 bg-[#EC4899] text-white rounded-lg px-3 text-xs">Guardar</Button><Button variant="ghost" onClick={()=>setEdit(null)} className="h-7 text-[#8b8fa3]">Cancelar</Button></>) : (<><Button variant="outline" onClick={()=>setEdit(e)} className="h-7 bg-[#0f1117] border-[#2a2e3e] text-[#8b8fa3] hover:text-white text-xs rounded-lg">Editar</Button><Button variant="ghost" onClick={()=>del.mutate(e.id)} className="h-7 text-[#8b8fa3] hover:text-red-400"><Trash2 size={14}/></Button></>)}
+                    {edit?.id===e.id ? (<><Button onClick={()=>update.mutate()} className="h-7 bg-[var(--accent)] text-[var(--on-accent)] rounded-lg px-3 text-xs">Guardar</Button><Button variant="ghost" onClick={()=>setEdit(null)} className="h-7 text-[var(--text-dim)]">Cancelar</Button></>) : confirmId===e.id ? (<><Button onClick={()=>{ del.mutate(e.id); setConfirmId(null) }} className="h-7 bg-red-500 hover:bg-red-600 text-white rounded-lg px-3 text-xs">Confirmar</Button><Button variant="ghost" onClick={()=>setConfirmId(null)} className="h-7 text-[var(--text-dim)]">Cancelar</Button></>) : (<><Button variant="outline" onClick={()=>setEdit(e)} className="h-7 bg-[var(--bg)] border-[var(--border)] text-[var(--text-dim)] hover:text-[var(--text)] text-xs rounded-lg">Editar</Button><Button variant="ghost" title="Eliminar empresa" aria-label={`Eliminar ${e.nombre}`} onClick={()=>setConfirmId(e.id)} className="h-7 text-[var(--text-dim)] hover:text-red-400"><Trash2 size={14}/></Button></>)}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {data?.length===0 && <div className="p-8 text-center text-sm text-[#8b8fa3] border-t border-[#1e2230]">Sin empresas aún</div>}
+          {data?.length===0 && <div className="p-8 text-center text-sm text-[var(--text-dim)] border-t border-[var(--border)]">Sin empresas aún</div>}
         </div>
       </div>
     </div>
