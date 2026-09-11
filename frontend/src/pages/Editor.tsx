@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useConfigStore } from "@/stores/config"
 import { useEditorHeaderStore } from "@/stores/editorHeader"
+import { useHistoryStore, type HistorySnapshot } from "@/stores/history"
 import { useUiStore } from "@/stores/ui"
 import { currentYear, newArchivoPayload } from "@/lib/defaults"
 import { Plus, Minus, Trash2, ArrowUp, ArrowDown, Users, Calendar, Check, Save, Download, Eye, Undo2, Redo2, Settings2, FileText, Table2, Palette, RectangleVertical, RectangleHorizontal, PanelRightClose, PanelRightOpen } from "lucide-react"
@@ -99,6 +100,11 @@ export function Editor() {
   const [tipoTmp, setTipoTmp] = useState("")
   const [panelTab, setPanelTab] = useState<"tabla" | "diseno">("tabla")
   const [orientation, setOrientation] = useState<"vertical" | "horizontal">("vertical")
+  const [preview, setPreview] = useState(false)
+  const pastLen = useHistoryStore((s) => s.past.length)
+  const futureLen = useHistoryStore((s) => s.future.length)
+  const undoTip = useHistoryStore((s) => (s.past.length ? s.past[s.past.length - 1].label : null))
+  const redoTip = useHistoryStore((s) => (s.future.length ? s.future[s.future.length - 1].label : null))
   const ZOOM_STEPS = [0.5, 0.6, 0.75, 1, 1.25, 1.5]
   const defaultZoom = (_o: "vertical" | "horizontal") => 1
   const [zoom, setZoom] = useState(1)
@@ -120,9 +126,157 @@ export function Editor() {
   useEffect(() => { if (archivo) { setScaleStart(archivo.periodo_inicio); setScaleEnd(archivo.periodo_fin); setTipoTmp(archivo.tipo_revision ?? "") } }, [archivo])
   const createArchivo = useMutation({ mutationFn: async () => (await api.post("/archivos", newArchivoPayload())).data, onSuccess: (d) => setArchivoId(d.id) })
   useEffect(() => { if (!id && !archivoId) createArchivo.mutate() }, [])
+  useEffect(() => { useHistoryStore.getState().clear() }, [archivoId])
+
+  const snapshotCurrent = (label: string): HistorySnapshot => ({
+    label,
+    filas: qc.getQueryData(["filas", archivoId]),
+    celdas: qc.getQueryData(["celdas", archivoId]),
+    archivo: qc.getQueryData(["archivo", archivoId]),
+  })
+  const pushHistory = (label: string) => {
+    const s = snapshotCurrent(label)
+    // Don't push empty initial snapshots (nothing loaded yet)
+    if (!s.filas && !s.celdas && !s.archivo) return
+    useHistoryStore.getState().push(s)
+  }
+  const applySnapshot = (s: HistorySnapshot) => {
+    if (s.filas !== undefined) qc.setQueryData(["filas", archivoId], s.filas)
+    if (s.celdas !== undefined) qc.setQueryData(["celdas", archivoId], s.celdas)
+    if (s.archivo !== undefined) qc.setQueryData(["archivo", archivoId], s.archivo)
+  }
+  // Lleva el servidor al estado `target`, usando `source` (estado previo local) para un diff mínimo.
+  const syncSnapshotToServer = async (target: HistorySnapshot, source: HistorySnapshot) => {
+    const tFilas: any[] = target.filas ?? []
+    const sFilas: any[] = source.filas ?? []
+    const tCeldas: any[] = target.celdas ?? []
+    const sCeldas: any[] = source.celdas ?? []
+    // Archivo
+    const ta = target.archivo as any, sa = source.archivo as any
+    if (ta && sa) {
+      const patch: any = {}
+      for (const k of ["titulo", "tipo_revision", "periodo_inicio", "periodo_fin", "personal_count"]) {
+        if (ta[k] !== sa[k] && ta[k] !== undefined) patch[k] = ta[k]
+      }
+      if (Object.keys(patch).length) {
+        try { await api.put(`/archivos/${archivoId}`, patch) } catch { /* best-effort */ }
+      }
+    }
+    // Filas eliminadas en target (sobran en servidor) -> DELETE
+    const tIds = new Set(tFilas.map((f: any) => f.id))
+    const sIds = new Set(sFilas.map((f: any) => f.id))
+    const recreatedOldIds = new Set<string>()
+    for (const f of sFilas) {
+      if (!tIds.has(f.id)) {
+        try { await api.delete(`/archivos/${archivoId}/filas/${f.id}`) } catch { /* best-effort */ }
+      }
+    }
+    // Filas que faltan en servidor (se habían borrado) -> recrear
+    for (const f of tFilas) {
+      if (!sIds.has(f.id)) {
+        recreatedOldIds.add(f.id)
+        try {
+          const payload: any = f.empresa_id ? { empresa_id: f.empresa_id } : { nombre: f.nombre_snapshot || "Fila" }
+          const created = (await api.post(`/archivos/${archivoId}/filas`, payload)).data
+          const patch: any = {}
+          if (f.responsable) patch.responsable = f.responsable
+          if (f.observacion) patch.observacion = f.observacion
+          if (Object.keys(patch).length) await api.put(`/archivos/${archivoId}/filas/${created.id}`, patch)
+          // Restaurar checks de esa fila (los recreados nacen sin revisar)
+          const want = tCeldas.filter((c: any) => c.fila_id === f.id && c.revisado)
+          if (want.length) {
+            const fresh = (await api.get(`/archivos/${archivoId}/celdas`)).data as any[]
+            const byKey = new Map(fresh.filter((c: any) => c.fila_id === created.id).map((c: any) => [`${c.anio}-${c.mes}`, c]))
+            await Promise.all(want.map((w: any) => {
+              const hit = byKey.get(`${w.anio}-${w.mes}`)
+              return hit ? api.put(`/archivos/celdas/${hit.id}`, { revisado: true }).catch(() => null) : null
+            }))
+          }
+        } catch { /* best-effort */ }
+      }
+    }
+    // Filas comunes con cambios -> PUT
+    await Promise.all(tFilas.filter((f: any) => sIds.has(f.id)).map(async (f: any) => {
+      const s = sFilas.find((x: any) => x.id === f.id)
+      if (!s) return null
+      const patch: any = {}
+      if (f.empresa_id !== s.empresa_id) patch.empresa_id = f.empresa_id ?? ""
+      if ((f.nombre_snapshot ?? "") !== (s.nombre_snapshot ?? "") && !f.empresa_id) patch.nombre = f.nombre_snapshot
+      if ((f.responsable ?? "") !== (s.responsable ?? "")) patch.responsable = f.responsable ?? ""
+      if ((f.observacion ?? "") !== (s.observacion ?? "")) patch.observacion = f.observacion ?? ""
+      if (Object.keys(patch).length) {
+        try { await api.put(`/archivos/${archivoId}/filas/${f.id}`, patch) } catch { /* best-effort */ }
+      }
+      return null
+    }))
+    // Orden -> reorder si cambió la secuencia
+    const tOrder = tFilas.slice().sort((a: any, b: any) => a.orden - b.orden).map((f: any) => f.id).join(",")
+    const sOrder = sFilas.slice().sort((a: any, b: any) => a.orden - b.orden).map((f: any) => f.id).join(",")
+    if (tOrder && tOrder !== sOrder) {
+      try { await api.post(`/archivos/${archivoId}/filas/reorder`, { order: tFilas.slice().sort((a: any, b: any) => a.orden - b.orden).map((f: any) => f.id) }) } catch { /* best-effort */ }
+    }
+    // Celdas comunes (mismo id) con revisado distinto -> PUT
+    const sById = new Map(sCeldas.map((c: any) => [c.id, c]))
+    const changed = tCeldas.filter((c: any) => {
+      if (recreatedOldIds.has(c.fila_id)) return false
+      const s = sById.get(c.id)
+      return s && !!s.revisado !== !!c.revisado
+    })
+    if (changed.length) {
+      await Promise.all(changed.map((c: any) =>
+        api.put(`/archivos/celdas/${c.id}`, { revisado: !!c.revisado }).catch(() => null)
+      ))
+    }
+  }
+  const doUndo = async () => {
+    const st = useHistoryStore.getState()
+    const current = snapshotCurrent(st.undoLabel() ?? "estado actual")
+    const prev = st.popUndo(current)
+    if (!prev) return
+    applySnapshot(prev)
+    hdr.setDirty(true)
+    try { await syncSnapshotToServer(prev, current) } finally {
+      qc.invalidateQueries({ queryKey: ["filas", archivoId] })
+      qc.invalidateQueries({ queryKey: ["celdas", archivoId] })
+      qc.invalidateQueries({ queryKey: ["archivo", archivoId] })
+      qc.invalidateQueries({ queryKey: ["stats", archivoId] })
+    }
+  }
+  const doRedo = async () => {
+    const st = useHistoryStore.getState()
+    const current = snapshotCurrent(st.redoLabel() ?? "estado actual")
+    const next = st.popRedo(current)
+    if (!next) return
+    applySnapshot(next)
+    hdr.setDirty(true)
+    try { await syncSnapshotToServer(next, current) } finally {
+      qc.invalidateQueries({ queryKey: ["filas", archivoId] })
+      qc.invalidateQueries({ queryKey: ["celdas", archivoId] })
+      qc.invalidateQueries({ queryKey: ["archivo", archivoId] })
+      qc.invalidateQueries({ queryKey: ["stats", archivoId] })
+    }
+  }
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      const editable = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)
+      if (e.key === "Escape") {
+        if (preview) { setPreview(false); return }
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && !editable) {
+        const k = e.key.toLowerCase()
+        if (k === "z" && !e.shiftKey) { e.preventDefault(); doUndo() }
+        else if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); doRedo() }
+      }
+    }
+    document.addEventListener("keydown", h)
+    return () => document.removeEventListener("keydown", h)
+  }, [preview, archivoId, filas, celdas, archivo])
   const toggle = useMutation({
     mutationFn: async (c: any) => (await api.put(`/archivos/celdas/${c.id}`, { revisado: !c.revisado })).data,
     onMutate: async (c: any) => {
+      pushHistory(c?.revisado ? "Desmarcar mes" : "Marcar mes")
       hdr.setDirty(true)
       await qc.cancelQueries({ queryKey: ["celdas", archivoId] })
       const prev = qc.getQueryData(["celdas", archivoId])
@@ -132,12 +286,12 @@ export function Editor() {
     onError: (_e, _c, ctx: any) => { if (ctx?.prev) qc.setQueryData(["celdas", archivoId], ctx.prev) },
     onSettled: () => { qc.invalidateQueries({ queryKey: ["celdas", archivoId] }); qc.invalidateQueries({ queryKey: ["stats", archivoId] }) },
   })
-  const addFila = useMutation({ mutationFn: async (p:any) => (await api.post(`/archivos/${archivoId}/filas`, p)).data, onMutate: () => hdr.setDirty(true), onSuccess: () => { qc.invalidateQueries({ queryKey: ["filas", archivoId] }); qc.invalidateQueries({ queryKey: ["celdas", archivoId] }) } })
-  const updateFila = useMutation({ mutationFn: async ({ fid, patch }: { fid: string; patch: any }) => (await api.put(`/archivos/${archivoId}/filas/${fid}`, patch)).data, onMutate: () => hdr.setDirty(true), onSuccess: () => { qc.invalidateQueries({ queryKey: ["filas", archivoId] }); qc.invalidateQueries({ queryKey: ["celdas", archivoId] }) } })
-  const deleteFila = useMutation({ mutationFn: async (fid: string) => await api.delete(`/archivos/${archivoId}/filas/${fid}`), onMutate: () => hdr.setDirty(true), onSuccess: () => qc.invalidateQueries({ queryKey: ["filas", archivoId] }) })
-  const applyScale = useMutation({ mutationFn: async () => (await api.put(`/archivos/${archivoId}`, { periodo_inicio: Number(scaleStart), periodo_fin: Number(scaleEnd) })).data, onMutate: () => hdr.setDirty(true), onSuccess: () => qc.invalidateQueries({ queryKey: ["archivo", archivoId] }) })
-  const updatePersonal = useMutation({ mutationFn: async (n:number) => (await api.put(`/archivos/${archivoId}`, { personal_count: n })).data, onMutate: ()=>hdr.setDirty(true), onSuccess: ()=>qc.invalidateQueries({queryKey:["archivo",archivoId]}) })
-  const saveTipo = (v:string) => { const t = v.trim(); if (t !== (archivo?.tipo_revision ?? "")) { hdr.setDirty(true); api.put(`/archivos/${archivoId}`,{tipo_revision:t}).then(()=>qc.invalidateQueries({queryKey:["archivo",archivoId]})) } }
+  const addFila = useMutation({ mutationFn: async (p:any) => (await api.post(`/archivos/${archivoId}/filas`, p)).data, onMutate: () => { pushHistory("Agregar fila"); hdr.setDirty(true) }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["filas", archivoId] }); qc.invalidateQueries({ queryKey: ["celdas", archivoId] }) } })
+  const updateFila = useMutation({ mutationFn: async ({ fid, patch }: { fid: string; patch: any }) => (await api.put(`/archivos/${archivoId}/filas/${fid}`, patch)).data, onMutate: (v: any) => { pushHistory(v?.patch?.empresa_id !== undefined ? "Cambiar empresa" : "Editar fila"); hdr.setDirty(true) }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["filas", archivoId] }); qc.invalidateQueries({ queryKey: ["celdas", archivoId] }) } })
+  const deleteFila = useMutation({ mutationFn: async (fid: string) => await api.delete(`/archivos/${archivoId}/filas/${fid}`), onMutate: () => { pushHistory("Eliminar fila"); hdr.setDirty(true) }, onSuccess: () => qc.invalidateQueries({ queryKey: ["filas", archivoId] }) })
+  const applyScale = useMutation({ mutationFn: async () => (await api.put(`/archivos/${archivoId}`, { periodo_inicio: Number(scaleStart), periodo_fin: Number(scaleEnd) })).data, onMutate: () => { pushHistory("Cambiar escala de años"); hdr.setDirty(true) }, onSuccess: () => qc.invalidateQueries({ queryKey: ["archivo", archivoId] }) })
+  const updatePersonal = useMutation({ mutationFn: async (n:number) => (await api.put(`/archivos/${archivoId}`, { personal_count: n })).data, onMutate: ()=>{ pushHistory("Cambiar personal"); hdr.setDirty(true) }, onSuccess: ()=>qc.invalidateQueries({queryKey:["archivo",archivoId]}) })
+  const saveTipo = (v:string) => { const t = v.trim(); if (t !== (archivo?.tipo_revision ?? "")) { pushHistory("Cambiar tipo de revisión"); hdr.setDirty(true); api.put(`/archivos/${archivoId}`,{tipo_revision:t}).then(()=>qc.invalidateQueries({queryKey:["archivo",archivoId]})) } }
   const isMutating = useIsMutating()
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle")
   const [validAlert, setValidAlert] = useState<any[] | null>(null)
@@ -183,7 +337,7 @@ export function Editor() {
     }
   }
   useEffect(()=>{ if(!archivo) return; hdr.set({ archivoId: archivo.id, titulo: archivo.titulo, filas: (filas as any)?.length ?? 0, dirty:false } as any)}, [archivo?.id, (archivo as any)?.titulo, (filas as any)?.length])
-  useEffect(()=>{ hdr.set({ onSaveTitle: (v:string)=>{ if(v!==archivo?.titulo) api.put(`/archivos/${archivoId}`,{titulo:v}).then(()=>qc.invalidateQueries({queryKey:["archivo",archivoId]})) }, onExport: (fmt:any)=>exportar(fmt) } as any); return ()=>{ hdr.set({archivoId:null} as any)}}, [archivoId])
+  useEffect(()=>{ hdr.set({ onSaveTitle: (v:string)=>{ if(v!==archivo?.titulo) { pushHistory("Cambiar título"); api.put(`/archivos/${archivoId}`,{titulo:v}).then(()=>qc.invalidateQueries({queryKey:["archivo",archivoId]})) } }, onExport: (fmt:any)=>exportar(fmt) } as any); return ()=>{ hdr.set({archivoId:null} as any)}}, [archivoId])
   if (!archivoId) return <div className="p-8 text-center text-[var(--text-dim)]">Creando...</div>
   if (!archivo || !filas) return <div className="p-8 text-[var(--text-dim)]">Cargando...</div>
   const map=new Map<string,any>(); celdas?.forEach((c:any)=>map.set(`${c.fila_id}-${c.anio}-${c.mes}`,c))
@@ -195,6 +349,7 @@ export function Editor() {
     const tmp=o[idx]; o[idx]=o[t]; o[t]=tmp
     const next=o.map((f:any,i:number)=>({...f,orden:i}))
     const prev=qc.getQueryData(["filas",archivoId])
+    pushHistory(dir===-1 ? "Subir fila" : "Bajar fila")
     hdr.setDirty(true)
     qc.setQueryData(["filas",archivoId], next)
     api.post(`/archivos/${archivoId}/filas/reorder`, { order: next.map((f:any)=>f.id) })
@@ -205,51 +360,63 @@ export function Editor() {
     <div className="flex flex-1 min-w-0 min-h-0 bg-[var(--bg)]">
       {/* Canvas — white page like Foliora */}
       <div className="flex-1 bg-[var(--bg)] flex flex-col min-w-0 overflow-auto">
-        <div className="sticky top-0 z-10 flex items-center justify-center gap-2 px-3 py-2 bg-[var(--bg)] border-b border-[var(--border)] text-[12px] text-[var(--text-dim)]">
-          <div className="flex items-center gap-1 bg-[var(--surface)] border border-[var(--border)] rounded-full px-2 py-1">
-            <span className="px-2 text-[var(--text)]">Página 1</span>
-          </div>
-          <div className="flex items-center gap-0.5 bg-[var(--surface)] border border-[var(--border)] rounded-full p-0.5" role="group" aria-label="Orientación de hoja">
-            <button onClick={()=>{ setOrientation("vertical"); setZoom(defaultZoom("vertical")) }} title="Vertical" className={`w-7 h-6 flex items-center justify-center rounded-full transition ${orientation==="vertical" ? "bg-[var(--surface-2)] text-[var(--text)] border border-[var(--accent-border)]" : "text-[var(--text-dim)] hover:text-[var(--text)]"}`}>
-              <RectangleVertical size={13}/>
+        <div className="sticky top-0 z-10 flex justify-center px-3 py-2 bg-[var(--bg)]/90 backdrop-blur border-b border-[var(--border)] text-[12px] text-[var(--text-dim)]">
+          <div className="flex items-center gap-1 overflow-x-auto max-w-full bg-[var(--surface)] border border-[var(--border)] rounded-full pl-3 pr-1.5 py-1 shadow-sm" role="toolbar" aria-label="Herramientas del editor">
+            <span className="text-[var(--text)] whitespace-nowrap">Página 1</span>
+            <span aria-hidden className="w-px h-5 bg-[var(--border)] mx-1 shrink-0" />
+            <div className="flex items-center gap-0.5" role="group" aria-label="Orientación de hoja">
+              <button onClick={()=>{ setOrientation("vertical"); setZoom(defaultZoom("vertical")) }} title="Vertical" aria-pressed={orientation==="vertical"} className={`w-7 h-7 flex items-center justify-center rounded-full transition ${orientation==="vertical" ? "bg-[var(--surface-2)] text-[var(--text)] border border-[var(--accent-border)]" : "text-[var(--text-dim)] hover:text-[var(--text)] border border-transparent"}`}>
+                <RectangleVertical size={13}/>
+              </button>
+              <button onClick={()=>{ setOrientation("horizontal"); setZoom(defaultZoom("horizontal")) }} title="Horizontal" aria-pressed={orientation==="horizontal"} className={`w-7 h-7 flex items-center justify-center rounded-full transition ${orientation==="horizontal" ? "bg-[var(--surface-2)] text-[var(--text)] border border-[var(--accent-border)]" : "text-[var(--text-dim)] hover:text-[var(--text)] border border-transparent"}`}>
+                <RectangleHorizontal size={13}/>
+              </button>
+            </div>
+            <span aria-hidden className="w-px h-5 bg-[var(--border)] mx-1 shrink-0" />
+            <div className="flex items-center gap-0.5" role="group" aria-label="Zoom de hoja">
+              <button onClick={()=>stepZoom(-1)} title="Reducir zoom" aria-label="Reducir zoom" className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition">
+                <Minus size={13}/>
+              </button>
+              <button onClick={()=>setZoom(defaultZoom(orientation))} title="Restablecer zoom" className="px-1.5 text-[11px] font-mono text-[var(--text)] hover:text-[var(--text)] min-w-[42px] text-center">
+                {Math.round(zoom * 100)}%
+              </button>
+              <button onClick={()=>stepZoom(1)} title="Ampliar zoom" aria-label="Ampliar zoom" className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition">
+                <Plus size={13}/>
+              </button>
+            </div>
+            <span aria-hidden className="hidden md:block w-px h-5 bg-[var(--border)] mx-1 shrink-0" />
+            <div className="hidden md:flex items-center gap-0.5" role="group" aria-label="Edición">
+              <button onClick={doUndo} disabled={pastLen===0} title={undoTip ? `Deshacer: ${undoTip} (Ctrl+Z)` : "Deshacer (Ctrl+Z)"} className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition disabled:opacity-40 disabled:hover:text-[var(--text-dim)] disabled:cursor-not-allowed" aria-label="Deshacer"><Undo2 size={13}/></button>
+              <button onClick={doRedo} disabled={futureLen===0} title={redoTip ? `Rehacer: ${redoTip} (Ctrl+Y)` : "Rehacer (Ctrl+Y)"} className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition disabled:opacity-40 disabled:hover:text-[var(--text-dim)] disabled:cursor-not-allowed" aria-label="Rehacer"><Redo2 size={13}/></button>
+              <button onClick={()=>setPreview(true)} title="Vista previa (solo hoja)" aria-label="Vista previa" aria-pressed={preview} className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition"><Eye size={13}/></button>
+            </div>
+            <span aria-hidden className="w-px h-5 bg-[var(--border)] mx-1 shrink-0" />
+            <button onClick={guardar} disabled={isMutating > 0 || saveState === "saving"} title="Validar y guardar" className={`flex items-center gap-1.5 rounded-full px-3 h-7 text-[12px] font-medium transition border whitespace-nowrap ${saveState === "saved" ? "bg-[var(--accent-soft)] border-[var(--accent-border)] text-[var(--success)]" : "bg-[var(--surface)] border-[var(--border)] text-[var(--text)] hover:text-[var(--text)] hover:border-[var(--accent-border)]"} disabled:opacity-50`}>
+              {saveState === "saved" ? <><Check size={13}/> Guardado</> : saveState === "saving" ? "Guardando..." : <><Save size={13}/> Guardar</>}
             </button>
-            <button onClick={()=>{ setOrientation("horizontal"); setZoom(defaultZoom("horizontal")) }} title="Horizontal" className={`w-7 h-6 flex items-center justify-center rounded-full transition ${orientation==="horizontal" ? "bg-[var(--surface-2)] text-[var(--text)] border border-[var(--accent-border)]" : "text-[var(--text-dim)] hover:text-[var(--text)]"}`}>
-              <RectangleHorizontal size={13}/>
-            </button>
-          </div>
-          <div className="flex items-center gap-0.5 bg-[var(--surface)] border border-[var(--border)] rounded-full p-0.5" role="group" aria-label="Zoom de hoja">
-            <button onClick={()=>stepZoom(-1)} title="Reducir zoom" className="w-7 h-6 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition">
-              <Minus size={13}/>
-            </button>
-            <button onClick={()=>setZoom(defaultZoom(orientation))} title="Restablecer zoom" className="px-1.5 text-[11px] font-mono text-[var(--text)] hover:text-[var(--text)] min-w-[42px] text-center">
-              {Math.round(zoom * 100)}%
-            </button>
-            <button onClick={()=>stepZoom(1)} title="Ampliar zoom" className="w-7 h-6 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition">
-              <Plus size={13}/>
-            </button>
-          </div>
-          <div className="hidden lg:flex items-center gap-0.5 bg-[var(--surface)] border border-[var(--border)] rounded-full p-0.5" role="group" aria-label="Edición (próximamente)">
-            <button title="Deshacer (próximamente)" disabled className="w-7 h-6 flex items-center justify-center rounded-full text-[var(--text-dim)] opacity-50 cursor-not-allowed" aria-label="Deshacer"><Undo2 size={13}/></button>
-            <button title="Rehacer (próximamente)" disabled className="w-7 h-6 flex items-center justify-center rounded-full text-[var(--text-dim)] opacity-50 cursor-not-allowed" aria-label="Rehacer"><Redo2 size={13}/></button>
-            <button title="Vista previa (próximamente)" disabled className="w-7 h-6 flex items-center justify-center rounded-full text-[var(--text-dim)] opacity-50 cursor-not-allowed" aria-label="Vista previa"><Eye size={13}/></button>
-          </div>
-          <button onClick={guardar} disabled={isMutating > 0 || saveState === "saving"} title="Validar y guardar" className={`flex items-center gap-1.5 rounded-full px-3 h-7 text-[12px] font-medium transition border ${saveState === "saved" ? "bg-[var(--accent-soft)] border-[var(--accent-border)] text-[var(--success)]" : "bg-[var(--surface)] border-[var(--border)] text-[var(--text)] hover:text-[var(--text)] hover:border-[var(--accent-border)]"} disabled:opacity-50`}>
-            {saveState === "saved" ? <><Check size={13}/> Guardado</> : saveState === "saving" ? "Guardando..." : <><Save size={13}/> Guardar</>}
-          </button>
-          <div ref={exportRef} className="relative">
-            <button onClick={()=>setExportOpen(!exportOpen)} title="Exportar" aria-haspopup="menu" aria-expanded={exportOpen} className="flex items-center gap-1.5 rounded-full px-3 h-7 text-[12px] font-medium bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] transition">
-              <Download size={13}/> Exportar <span className="text-[10px]">▾</span>
-            </button>
-            {exportOpen && (
-              <div role="menu" className="absolute right-0 top-full mt-1 w-[150px] bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-xl p-1.5 z-30">
-                <button role="menuitem" onClick={()=>{ setExportOpen(false); exportar("pdf") }} className="w-full text-left px-3 py-2 rounded-lg text-xs text-[var(--text)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]">Descargar PDF</button>
-                <button role="menuitem" onClick={()=>{ setExportOpen(false); exportar("excel") }} className="w-full text-left px-3 py-2 rounded-lg text-xs text-[var(--text)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]">Descargar Excel</button>
-              </div>
-            )}
+            <div ref={exportRef} className="relative shrink-0">
+              <button onClick={()=>setExportOpen(!exportOpen)} title="Exportar" aria-haspopup="menu" aria-expanded={exportOpen} className="flex items-center gap-1.5 rounded-full px-3 h-7 text-[12px] font-medium bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] transition whitespace-nowrap">
+                <Download size={13}/> Exportar <span className="text-[10px]">▾</span>
+              </button>
+              {exportOpen && (
+                <div role="menu" className="absolute right-0 top-full mt-1 w-[150px] bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-xl p-1.5 z-30">
+                  <button role="menuitem" onClick={()=>{ setExportOpen(false); exportar("pdf") }} className="w-full text-left px-3 py-2 rounded-lg text-xs text-[var(--text)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]">Descargar PDF</button>
+                  <button role="menuitem" onClick={()=>{ setExportOpen(false); exportar("excel") }} className="w-full text-left px-3 py-2 rounded-lg text-xs text-[var(--text)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]">Descargar Excel</button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex-1 min-w-0 p-6 overflow-auto bg-[var(--bg)]">
-          <div style={{ width: sheetBase.w, minHeight: sheetBase.h }} className="max-w-none mx-auto bg-white shadow-[0_20px_60px_rgba(0,0,0,0.45)] rounded-lg overflow-hidden transition-all duration-300">
+          {preview && (
+            <>
+              <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-md" onClick={()=>setPreview(false)} aria-hidden />
+              <button onClick={()=>setPreview(false)} title="Salir de vista previa (Esc)" className="fixed top-4 right-4 z-50 flex items-center gap-2 rounded-full px-4 h-9 text-[12px] font-medium bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] shadow-xl hover:border-[var(--accent-border)] transition">
+                ✕ Salir de vista previa <span className="text-[10px] text-[var(--text-dim)]">Esc</span>
+              </button>
+            </>
+          )}
+          <div style={{ width: sheetBase.w, minHeight: sheetBase.h }} className={`max-w-none mx-auto bg-white shadow-[0_20px_60px_rgba(0,0,0,0.45)] rounded-lg overflow-hidden transition-all duration-300 relative ${preview ? "z-50 ring-2 ring-[var(--accent-border)]" : ""}`}>
             <div className="p-6" style={{ zoom: zoom }}>
               <div className="flex items-center gap-2 mb-3 text-xs">
                 {archivo.tipo_revision ? <span className="px-2 py-1 rounded bg-[var(--sheet-soft)] border border-[var(--sheet-border)] text-[var(--sheet-ink)]">{archivo.tipo_revision}</span> : null}
@@ -262,10 +429,10 @@ export function Editor() {
                   <span className="flex items-center gap-2 text-[var(--sheet-ink)] ml-auto"><span>Progreso <b>{stats.progreso}%</b></span><span className="w-24 h-1.5 bg-[var(--surface)] border border-[var(--sheet-border)] rounded-full overflow-hidden inline-block"><span className="block h-full bg-[var(--sheet-accent)]" style={{width:`${stats.progreso}%`}}/></span></span>
                 </div>
               )}
-              <div className="overflow-auto">
-                <table className={`w-full text-xs border-collapse table-${cfg.table_density}`} style={{ minWidth: 488 + years.length * 12 * 20 }}>
+              <div className={`overflow-auto ${preview ? "pointer-events-none select-none" : ""}`}>
+                <table className={`w-full text-xs border-collapse border border-[var(--sheet-border)] table-${cfg.table_density}`} style={{ minWidth: 488 + years.length * 12 * 20 }} aria-readonly={preview || undefined}>
                   <thead>
-                    <tr className="bg-[var(--sheet-soft)] border-b border-[var(--sheet-border)]" style={headBg ? { background: headBg } : undefined}>
+                    <tr className="bg-[var(--sheet-soft)] border-y border-[var(--sheet-border)]" style={headBg ? { background: headBg } : undefined}>
                       <th rowSpan={2} className="p-2 w-[44px] text-left text-[var(--sheet-ink)] font-semibold align-middle border-x border-[var(--sheet-border)]">N.</th>
                       <th rowSpan={2} className="p-2 text-center text-[var(--sheet-ink)] font-semibold min-w-[160px] align-middle border-x border-[var(--sheet-border)]">Empresa</th>
                       <th colSpan={years.length * 12} className="p-2 text-center text-[var(--sheet-ink)] font-semibold text-[12px] border-x border-[var(--sheet-border)]">Año / Meses</th>
@@ -274,7 +441,7 @@ export function Editor() {
                     </tr>
                     <tr className="bg-[var(--sheet-soft)] border-b border-[var(--sheet-border)]" style={headBg ? { background: headBg } : undefined}>
                       {years.map(y=>(
-                        <th key={y} colSpan={12} className="p-1 text-center text-[var(--sheet-ink)] font-semibold text-[11px] border-x border-[var(--sheet-border)]">{y}<div className="flex text-[9px] font-normal text-[var(--sheet-ink)]">{MESES.map((m, mi)=> <span key={`${y}-${mi}-${m}`} className="flex-1 text-center">{m}</span>)}</div></th>
+                        <th key={y} colSpan={12} className="p-0 text-center text-[var(--sheet-ink)] font-semibold text-[11px] border-x border-[var(--sheet-border)]"><div className="pt-1 pb-0.5 border-b border-[var(--sheet-border)]">{y}</div><div className="flex divide-x divide-[var(--sheet-border)] py-1 text-[9px] font-normal text-[var(--sheet-ink)]">{MESES.map((m, mi)=> <span key={`${y}-${mi}-${m}`} className="flex-1 text-center">{m}</span>)}</div></th>
                       ))}
                     </tr>
                   </thead>
@@ -284,20 +451,20 @@ export function Editor() {
                     ) : (
                       filas.slice().sort((a:any,b:any)=>a.orden-b.orden).map((fila:any, idx:number)=>(
                         <tr key={fila.id} className="border-t border-[var(--sheet-border)] hover:bg-[var(--sheet-soft)]">
-                          <td className="p-2 text-center text-[var(--text-dim)] text-xs relative group">
+                          <td className="p-2 text-center text-[var(--text-dim)] text-xs relative group border-x border-[var(--sheet-border)]">
                             {idx+1}
-                            <RowMenu fila={fila} idx={idx} total={orderedFilas.length} onMove={(dir)=>move(idx,dir)} onDelete={()=>deleteFila.mutate(fila.id)} />
+                            {!preview && <RowMenu fila={fila} idx={idx} total={orderedFilas.length} onMove={(dir)=>move(idx,dir)} onDelete={()=>deleteFila.mutate(fila.id)} />}
                           </td>
-                          <td className="p-2 relative text-center">
-                            <button onClick={()=>setPickFilaId(pickFilaId===fila.id?null:fila.id)} title={fila.nombre_snapshot ? "Cambiar empresa" : "Elegir empresa"} className={`rounded px-2 h-7 w-full text-xs flex items-center gap-1 border border-transparent hover:border-[var(--sheet-border)] hover:bg-[var(--sheet-soft)] ${fila.nombre_snapshot ? "font-medium text-[#1e293b]" : ""}`}>
+                          <td className="p-2 relative text-center border-x border-[var(--sheet-border)]">
+                            <button disabled={preview} onClick={()=>setPickFilaId(pickFilaId===fila.id?null:fila.id)} title={fila.nombre_snapshot ? "Cambiar empresa" : "Elegir empresa"} className={`rounded px-2 h-7 w-full text-xs flex items-center gap-1 border border-transparent hover:border-[var(--sheet-border)] hover:bg-[var(--sheet-soft)] disabled:hover:border-transparent disabled:hover:bg-transparent disabled:cursor-default ${fila.nombre_snapshot ? "font-medium text-[#1e293b]" : ""}`}>
                               <span className="flex-1 text-left truncate">{fila.nombre_snapshot || " "}</span>
                               <span className={`text-[10px] ml-auto ${fila.nombre_snapshot ? "text-[var(--text-dim)]" : "text-[var(--text-dim)]"}`}>▾</span>
                             </button>
                             {pickFilaId===fila.id && empresas && <EmpresaPicker fila={fila} empresas={empresas} onClose={()=>setPickFilaId(null)} onSelect={async(v)=>{ await updateFila.mutateAsync({ fid: fila.id, patch: v as any }); setPickFilaId(null) }} />}
                           </td>
                           {years.map(y=>(
-                            <td key={y} colSpan={12} className="p-0">
-                              <div className="flex">
+                            <td key={y} colSpan={12} className="p-0 border-x border-[var(--sheet-border)]">
+                              <div className="flex divide-x divide-[var(--sheet-border)]">
                                 {MESES.map((_, mi)=>{
                                   const c = map.get(`${fila.id}-${y}-${mi+1}`)
                                   if(!c) return <span key={mi} className="flex-1 grid place-items-center py-2" title="Cargando..."><input type="checkbox" disabled aria-label="Cargando mes" className="w-4 h-4 accent-[var(--sheet-accent)] opacity-60" /></span>
@@ -309,12 +476,12 @@ export function Editor() {
                             </td>
                           ))}
                           {cfg.visible_fields.responsable && (
-                            <td className="p-0 min-w-[90px] border-l border-[var(--sheet-border)]">
+                            <td className="p-0 min-w-[90px] border-x border-[var(--sheet-border)]">
                               <FilaTextCell field="responsable" fila={fila} onSave={v=>updateFila.mutate({ fid: fila.id, patch:{ responsable: v } })} />
                             </td>
                           )}
                           {cfg.visible_fields.observaciones && (
-                            <td className="p-0 min-w-[140px] border-l border-[var(--sheet-border)]">
+                            <td className="p-0 min-w-[140px] border-x border-[var(--sheet-border)]">
                               <FilaTextCell field="observacion" fila={fila} onSave={v=>updateFila.mutate({ fid: fila.id, patch:{ observacion: v } })} />
                             </td>
                           )}
@@ -324,9 +491,11 @@ export function Editor() {
                   </tbody>
                 </table>
               </div>
+              {!preview && (
               <div className="p-3 border-t border-[var(--sheet-border)]">
                 <Button onClick={()=>addFila.mutate({ nombre: `Fila ${filas.length+1}` })} className="w-full h-8 rounded-lg border border-dashed border-[var(--sheet-border)] bg-[var(--sheet-soft)] hover:brightness-95 text-[var(--sheet-accent)] text-xs font-medium gap-1.5"><Plus size={13}/> Agregar fila</Button>
               </div>
+              )}
             </div>
           </div>
         </div>

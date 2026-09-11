@@ -99,6 +99,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-.table-compact td, .table-compact th { padding: 4px 8px; }
-.table-normal td, .table-normal th { padding: 8px 12px; }
-.table-comfortable td, .table-comfortable th { padding: 12px 16px; }
+.table-compact td:not(.p-0), .table-compact th:not(.p-0) { padding: 4px 8px; }
+.table-normal td:not(.p-0), .table-normal th:not(.p-0) { padding: 8px 12px; }
+.table-comfortable td:not(.p-0), .table-comfortable th:not(.p-0) { padding: 12px 16px; }
