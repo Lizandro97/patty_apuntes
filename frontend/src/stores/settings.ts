@@ -58,7 +58,7 @@ export const useSettingsStore = create<Store>()(
         r.style.setProperty("--primary", s.primary_color || "var(--accent)")
         const auto = !s.primary_color || LEGACY_AUTO.has(s.primary_color)
         r.style.setProperty("--sheet-accent", auto ? "var(--accent)" : s.primary_color)
-        r.style.setProperty("--font-family", s.font_family)
+        r.style.setProperty("--font-family", s.font_family === "Geist" ? "'Geist','Inter',system-ui,sans-serif" : s.font_family === "system-ui" ? "system-ui,-apple-system,sans-serif" : `'${s.font_family}',system-ui,-apple-system,sans-serif`)
         r.style.setProperty("--font-size", s.font_size_px + "px")
         r.style.setProperty("--table-header-bg", s.table_header_bg)
         r.style.setProperty("--grid-cols", String(s.grid_columns))

@@ -162,30 +162,34 @@ function Sidebar() {
               onClick={toggleCollapsed}
               title={t("nav.collapseMenu")}
               aria-label={t("nav.collapseMenu")}
-              className="ml-auto w-7 h-7 hidden lg:flex items-center justify-center rounded-lg text-[var(--text-dim)] hover:bg-[var(--surface)] hover:text-[var(--text)] transition"
+              className="ml-auto w-10 h-10 hidden lg:flex items-center justify-center rounded-lg text-[var(--text-dim)] hover:bg-[var(--surface)] hover:text-[var(--text)] transition"
             >
               <PanelLeftClose size={15} />
             </button>
           )}
         </div>
-        <nav className={cn("flex-1 flex flex-col gap-0.5 px-3 overflow-y-auto", collapsed && "lg:px-2 lg:items-center")}>
+        <nav aria-label={t("nav.brand")} className={cn("flex-1 flex flex-col gap-0.5 px-3 overflow-y-auto", collapsed && "lg:px-2 lg:items-center")}>
           {items.map((it) => {
             const Icon = it.icon
-            const isActive = activeKey === it.key
             return (
               <NavLink
                 key={it.key}
                 to={it.to}
+                end={it.to === "/"}
                 title={t(it.labelKey)}
                 onClick={() => setMobileOpen(false)}
                 className={cn(
-                  "flex items-center gap-3 rounded-xl text-[13px] leading-none transition border",
-                  collapsed ? "lg:w-[44px] lg:h-[44px] lg:justify-center lg:gap-0 px-3 py-2.5" : "px-3 py-2.5",
-                  isActive ? "bg-[var(--accent-soft)] text-[var(--accent)] border-[var(--accent-border)] font-medium" : "text-[var(--text-dim)] border-transparent hover:text-[var(--text)] hover:bg-[var(--surface)]"
+                  "flex items-center gap-3 rounded-xl text-[13px] leading-none transition-colors border",
+                  collapsed ? "lg:w-[44px] lg:min-h-[44px] lg:justify-center lg:gap-0 px-3 py-2.5 min-h-[44px]" : "px-3 py-2.5 min-h-[44px]",
+                  activeKey === it.key ? "bg-[var(--accent-soft)] text-[var(--accent)] border-[var(--accent-border)] font-medium" : "text-[var(--text-dim)] border-transparent hover:text-[var(--text)] hover:bg-[var(--surface)]"
                 )}
               >
-                <Icon className={cn("w-[18px] h-[18px] shrink-0", isActive && "stroke-[var(--accent)]")} strokeWidth={isActive ? 2 : 1.7} />
-                <span className={cn("truncate", collapsed && "lg:hidden")}>{t(it.labelKey)}</span>
+                {({ isActive }) => (
+                  <>
+                    <Icon aria-hidden className={cn("w-[18px] h-[18px] shrink-0", (isActive || activeKey === it.key) && "stroke-[var(--accent)]")} strokeWidth={isActive || activeKey === it.key ? 2 : 1.7} />
+                    <span className={cn("truncate", collapsed && "lg:hidden")}>{t(it.labelKey)}</span>
+                  </>
+                )}
               </NavLink>
             )
           })}

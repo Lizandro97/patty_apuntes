@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient, useIsMutating } from "@tanstack/react-query"
 import { api } from "@/lib/api"
-import { useParams } from "react-router-dom"
+import { useNavigate, useParams } from "react-router-dom"
 import { useEffect, useState, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import i18n from "@/i18n"
@@ -10,27 +10,35 @@ import { useSettingsStore } from "@/stores/settings"
 import { useEditorHeaderStore } from "@/stores/editorHeader"
 import { useHistoryStore, type HistorySnapshot } from "@/stores/history"
 import { useUiStore } from "@/stores/ui"
-import { currentYear, newRecordPayload } from "@/lib/defaults"
+import { currentYear, defaultTitle } from "@/lib/defaults"
+import { useToast } from "@/lib/toast"
+import { downloadBlob, exportFilename } from "@/lib/filenames"
 import { Plus, Minus, Trash2, ArrowUp, ArrowDown, Users, Calendar, Check, Save, Download, Eye, Undo2, Redo2, Settings2, FileText, Table2, Palette, RectangleVertical, RectangleHorizontal, PanelRightClose, PanelRightOpen, ChevronUp, ChevronDown, Menu, MoreHorizontal, Pencil } from "lucide-react"
 
 // Per-person color (P1..Pn index). Fixed distinguishable colorblind-safe palette;
 // the sheet is always light, so it works across all 3 themes.
 export const PERSON_COLORS = [
   "#0072B2", "#E69F00", "#009E73", "#D55E00", "#CC79A7",
-  "#56B4E9", "#F0E442", "#8B5CF6", "#10B981", "#999999",
+  "#56B4E9", "#B58900", "#8B5CF6", "#10B981", "#999999",
 ]
 
 function CompanyPicker({ row, companies, onSelect, onClose }: { row: any; companies: any[]; onSelect: (v: { company_id?: string }) => void; onClose: () => void }) {
   const { t } = useTranslation()
   const [q, setQ] = useState("")
   const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => { const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose() }; document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h) }, [onClose])
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose() }
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose() }
+    document.addEventListener("mousedown", h)
+    document.addEventListener("keydown", k)
+    return () => { document.removeEventListener("mousedown", h); document.removeEventListener("keydown", k) }
+  }, [onClose])
   const filtered = companies.filter((e: any) => e.name.toLowerCase().includes(q.toLowerCase()))
   return (
-    <div ref={ref} className="absolute z-30 top-full left-0 mt-1 w-[280px] bg-white border border-[var(--sheet-border)] rounded-xl shadow-[0_12px_32px_rgba(132,24,67,0.15)] p-2">
-      <Input autoFocus aria-label={t("editor.table.searchCompanyAria")} placeholder={t("editor.table.searchCompanyPh")} value={q} onChange={e=>setQ(e.target.value)} className="h-8 text-sm mb-2 bg-[var(--sheet-soft)] border-[var(--sheet-border)] text-[#1e293b] placeholder:text-[var(--text-dim)]" />
+    <div ref={ref} role="listbox" aria-label={t("editor.table.searchCompanyAria")} className="absolute z-30 top-full left-0 mt-1 w-[280px] bg-white border border-[var(--sheet-border)] rounded-xl shadow-[0_12px_32px_rgba(132,24,67,0.15)] p-2">
+      <Input autoFocus aria-label={t("editor.table.searchCompanyAria")} placeholder={t("editor.table.searchCompanyPh")} value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{ if(e.key==="Escape") onClose() }} className="h-8 text-sm mb-2 bg-[var(--sheet-soft)] border-[var(--sheet-border)] text-[#1e293b] placeholder:text-[var(--text-dim)]" />
       <div className="max-h-[180px] overflow-auto space-y-1">
-        {filtered.map((e:any)=>(<button key={e.id} onClick={()=>onSelect({company_id: e.id })} className="w-full text-left px-3 py-2 rounded-lg hover:bg-[var(--sheet-soft)] text-sm flex items-center justify-between text-[#1e293b]"><span>{e.name}</span><span className="text-[11px] text-[var(--sheet-accent)]">{row.company_id===e.id ? "✓" : ""}</span></button>))}
+        {filtered.map((e:any)=>(<button key={e.id} role="option" aria-selected={row.company_id===e.id} onClick={()=>onSelect({company_id: e.id })} className="w-full text-left px-3 py-2 rounded-lg hover:bg-[var(--sheet-soft)] text-sm flex items-center justify-between text-[#1e293b]"><span>{e.name}</span><span className="text-[11px] text-[var(--sheet-accent)]">{row.company_id===e.id ? "✓" : ""}</span></button>))}
         {filtered.length===0 && <div className="text-xs text-[var(--text-dim)] px-3 py-2">{t("editor.table.noCompanyResults")}</div>}
       </div>
       {row.company_id && (
@@ -42,7 +50,7 @@ function CompanyPicker({ row, companies, onSelect, onClose }: { row: any; compan
   )
 }
 
-function RowMenu({ row, idx, total, onMove, onDelete }: { row: any; idx: number; total: number; onMove: (dir: -1 | 1) => void; onDelete: () => void }) {
+function RowMenu({ row, idx, total, onMove, onDelete, onMarkRow }: { row: any; idx: number; total: number; onMove: (dir: -1 | 1) => void; onDelete: () => void; onMarkRow: (mark: boolean) => void }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
@@ -63,14 +71,17 @@ function RowMenu({ row, idx, total, onMove, onDelete }: { row: any; idx: number;
         aria-label={t("editor.table.rowOptions")}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="block w-0 h-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer border-b-[12px] border-b-[var(--sheet-accent)] hover:brightness-125 border-l-[12px] border-l-transparent"
-      />
+        className="flex w-7 h-7 items-center justify-center rounded-lg text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--sheet-soft)] border border-transparent hover:border-[var(--sheet-border)] transition-opacity cursor-pointer md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 focus-visible:opacity-100"
+      >⋯</button>
       {open && (
         <div className="absolute top-full left-0 mt-1 w-[190px] bg-white border border-[var(--sheet-border)] rounded-xl shadow-[0_12px_32px_rgba(132,24,67,0.15)] p-1.5 z-30 text-left">
           {!confirming ? (
             <>
-              <button onClick={() => { onMove(-1); setOpen(false) }} disabled={idx === 0} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-[#1e293b] hover:bg-[var(--sheet-soft)] disabled:opacity-40 disabled:hover:bg-transparent"><ArrowUp size={13}/> {t("editor.table.moveUp")}</button>
-              <button onClick={() => { onMove(1); setOpen(false) }} disabled={idx === total - 1} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-[#1e293b] hover:bg-[var(--sheet-soft)] disabled:opacity-40 disabled:hover:bg-transparent"><ArrowDown size={13}/> {t("editor.table.moveDown")}</button>
+              <button onClick={() => { onMarkRow(true); setOpen(false) }} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs text-[#1e293b] hover:bg-[var(--sheet-soft)]"><Check size={13}/> {t("editor.table.markRow")}</button>
+              <button onClick={() => { onMarkRow(false); setOpen(false) }} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs text-[#1e293b] hover:bg-[var(--sheet-soft)]"><Minus size={13}/> {t("editor.table.unmarkRow")}</button>
+              <div className="border-t border-[var(--sheet-border)] mt-1 pt-1" />
+              <button onClick={() => { onMove(-1); setOpen(false) }} disabled={idx === 0} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs text-[#1e293b] hover:bg-[var(--sheet-soft)] disabled:opacity-40 disabled:hover:bg-transparent"><ArrowUp size={13}/> {t("editor.table.moveUp")}</button>
+              <button onClick={() => { onMove(1); setOpen(false) }} disabled={idx === total - 1} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs text-[#1e293b] hover:bg-[var(--sheet-soft)] disabled:opacity-40 disabled:hover:bg-transparent"><ArrowDown size={13}/> {t("editor.table.moveDown")}</button>
               <div className="border-t border-[var(--sheet-border)] mt-1 pt-1">
                 <button onClick={() => setConfirming(true)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-[var(--danger)] hover:bg-[var(--danger)]/10"><Trash2 size={13}/> {t("editor.table.deleteRow")}</button>
               </div>
@@ -150,6 +161,19 @@ function DragHandle({ axis, title, zoom, startV, min, onV, onReset, onHover, onD
   return (
     <span
       title={title}
+      role="separator"
+      aria-orientation={axis === "x" ? "vertical" : "horizontal"}
+      aria-valuenow={Math.round(startV)}
+      aria-valuemin={min}
+      aria-label={title}
+      tabIndex={0}
+      onFocus={() => onHover?.(true)}
+      onBlur={() => onHover?.(false)}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); onV(Math.max(min, startV - 4)) }
+        else if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); onV(startV + 4) }
+        else if (e.key === "Home") { e.preventDefault(); onReset() }
+      }}
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}
       onDoubleClick={(e) => { e.stopPropagation(); onReset() }}
@@ -173,7 +197,7 @@ function DragHandle({ axis, title, zoom, startV, min, onV, onReset, onHover, onD
       }}
       onPointerUp={(e) => { end(); try { (e.target as HTMLElement).releasePointerCapture(e.pointerId) } catch { /* noop */ } }}
       onPointerCancel={() => end()}
-      className={`absolute ${pos} z-10 group/handle`}
+      className={`absolute ${pos} z-10 group/handle focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] rounded`}
     >
       <span className={`${line} ${on ? "bg-[var(--accent)]" : "bg-transparent group-hover/handle:bg-[var(--accent)]"} transition-colors`} />
     </span>
@@ -191,12 +215,19 @@ export function Editor() {
   const settings = useSettingsStore()
   const header = useEditorHeaderStore()
   const MONTHS = t("editor.months", { returnObjects: true }) as string[]
-  const [recordId, setRecordId] = useState<string | undefined>(id)
+  const recordId = id
+  // Draft mode: /editor without :id opens a blank sheet that lives only in
+  // local cache. Zero server writes until the user hits Guardar. Opened files
+  // keep the existing autosave behavior.
+  const isDraft = !recordId
+  const persist = <T,>(fn: () => Promise<T>): Promise<T | null> =>
+    isDraft ? Promise.resolve(null) : fn()
   const [pickRowId, setPickRowId] = useState<string | null>(null)
   const [scaleStart, setScaleStart] = useState(currentYear())
   const [scaleEnd, setScaleEnd] = useState(currentYear())
   const [typeDraft, setTypeDraft] = useState("")
   const [panelTab, setPanelTab] = useState<"table" | "design">("table")
+  const [mPanel, setMPanel] = useState(false)
   const [orientation, setOrientation] = useState<"vertical" | "horizontal">("vertical")
   const [preview, setPreview] = useState(false)
   // Active stamping person (PERSON_COLORS index). Device-local:
@@ -228,10 +259,19 @@ export function Editor() {
   const setMobileOpen = useUiStore((s) => s.setMobileOpen)
   const rightCollapsed = !rightOpen
   const setRightCollapsed = (v: boolean) => setRightOpen(!v)
-  const { data: record } = useQuery({ queryKey: ["record", recordId], enabled: !!recordId, queryFn: async () => (await api.get(`/records/${recordId}`)).data })
-  const { data: rows } = useQuery({ queryKey: ["rows", recordId], enabled: !!recordId, queryFn: async () => (await api.get(`/records/${recordId}/rows`)).data })
+  const { data: record, isPending: recPending, isError: recError, refetch: recRefetch } = useQuery({ queryKey: ["record", recordId], enabled: !!recordId, queryFn: async () => (await api.get(`/records/${recordId}`)).data })
+  const { data: rows, isPending: rowsPending, isError: rowsError, refetch: rowsRefetch } = useQuery({ queryKey: ["rows", recordId], enabled: !!recordId, queryFn: async () => (await api.get(`/records/${recordId}/rows`)).data })
   const { data: cells } = useQuery({ queryKey: ["cells", recordId], enabled: !!recordId, queryFn: async () => (await api.get(`/records/${recordId}/cells`)).data })
-  const { data: stats } = useQuery({ queryKey: ["stats", recordId], enabled: !!recordId, queryFn: async () => (await api.get(`/records/${recordId}/stats`)).data })
+  const { data: statsData } = useQuery({ queryKey: ["stats", recordId], enabled: !!recordId, queryFn: async () => (await api.get(`/records/${recordId}/stats`)).data })
+  // Draft: compute progress locally so the summary block works before Guardar
+  const stats = isDraft
+    ? (() => {
+        const list = ((cells as any[]) ?? [])
+        const total = list.length
+        const reviewed = list.filter((c: any) => c.reviewed).length
+        return total ? { total, reviewed, pending: total - reviewed, progress: Math.round((reviewed / total) * 100) } : null
+      })()
+    : statsData
   const { data: companies } = useQuery({ queryKey: ["companies"], queryFn: async () => (await api.get("/companies")).data })
   const { data: design } = useQuery({ queryKey: ["design", recordId], enabled: !!recordId, queryFn: async () => (await api.get(`/records/${recordId}/layout`)).data })
   const designPayload = (sec: "sheet" | "table"): any =>
@@ -241,6 +281,7 @@ export function Editor() {
   const designTimers = useRef<{ sheet?: any; table?: any }>({})
   useEffect(() => () => { clearTimeout(designTimers.current.sheet); clearTimeout(designTimers.current.table) }, [recordId])
   const schedulePutDesign = (section: "sheet" | "table") => {
+    if (isDraft) return // draft layout lives in cache until Guardar
     clearTimeout(designTimers.current[section])
     designTimers.current[section] = setTimeout(async () => {
       try {
@@ -296,7 +337,7 @@ export function Editor() {
       const cols = { ...p.cols }
       for (const y of years) for (let mi = 0; mi < 12; mi++) {
         const k = monthKey(y, mi)
-        cols[k] = Math.max(16, Math.round(((cols[k] ?? 20) / cur) * totalW))
+        cols[k] = Math.max(24, Math.round(((cols[k] ?? 34) / cur) * totalW))
       }
       return { ...p, cols }
     })
@@ -342,9 +383,65 @@ export function Editor() {
     return () => document.removeEventListener("pointerdown", h)
   }, [])
   useEffect(() => { if (record) { setScaleStart(record.period_start); setScaleEnd(record.period_end); setTypeDraft(record.review_type ?? "") } }, [record])
-  const createRecord = useMutation({ mutationFn: async () => (await api.post("/records", newRecordPayload())).data, onSuccess: (d) => setRecordId(d.id) })
-  useEffect(() => { if (!id && !recordId) createRecord.mutate() }, [])
+  const navigate = useNavigate()
+  // Seed blank draft state (record/rows/cells/design live in cache under the undefined key).
+  // Idempotent by state (not by ref) so StrictMode remounts and re-runs recover.
+  // Mirrors the backend _ensure_rows default: 5 empty rows.
+  useEffect(() => {
+    if (!isDraft) return
+    const y = currentYear()
+    if (!qc.getQueryData(["record", recordId])) {
+      qc.setQueryData(["record", recordId], { id: "draft", title: defaultTitle(), review_type: "", period_start: y, period_end: y, staff_count: 2 })
+    }
+    if (!qc.getQueryData(["rows", recordId])) {
+      qc.setQueryData(["rows", recordId], Array.from({ length: 5 }, (_, i) => ({
+        id: `dr-seed-${i}`, record_id: "draft", company_id: null, name_snapshot: "", position: i, assignee: "", note: "",
+      })))
+    }
+    if (!qc.getQueryData(["cells", recordId])) qc.setQueryData(["cells", recordId], [])
+    if (!qc.getQueryData(["design", recordId])) qc.setQueryData(["design", recordId], [])
+    const h = useEditorHeaderStore.getState()
+    if (!h.recordId) header.set({ recordId: "draft", title: defaultTitle(), rowCount: 5 } as any)
+  }, [isDraft])
+  // Draft: materialize a cell object for every row x year x month so the whole
+  // sheet (toggle/mark/recolor/history) works exactly like a saved file
+  useEffect(() => {
+    if (!isDraft || !record || !rows) return
+    const have = new Set(((qc.getQueryData(["cells", recordId]) as any[]) ?? []).map((c: any) => `${c.row_id}-${c.year}-${c.month}`))
+    const add: any[] = []
+    for (const r of (rows as any[])) {
+      for (let y = record.period_start; y <= record.period_end; y++) {
+        for (let m = 1; m <= 12; m++) {
+          if (!have.has(`${r.id}-${y}-${m}`)) {
+            add.push({ id: `dc-${r.id}-${y}-${m}`, row_id: r.id, year: y, month: m, reviewed: false, color: "" })
+          }
+        }
+      }
+    }
+    if (add.length) qc.setQueryData(["cells", recordId], (old: any) => [...(old ?? []), ...add])
+  }, [isDraft, record, rows])
+  // Draft: warn before losing unsaved work on reload/close
+  useEffect(() => {
+    if (!isDraft) return
+    const h = (e: BeforeUnloadEvent) => {
+      if (useEditorHeaderStore.getState().dirty) e.preventDefault()
+    }
+    window.addEventListener("beforeunload", h)
+    return () => window.removeEventListener("beforeunload", h)
+  }, [isDraft])
   useEffect(() => { useHistoryStore.getState().clear() }, [recordId])
+  // Riley: refresh mid-flow no pierde `dirty`
+  useEffect(() => {
+    if (!recordId) return
+    try { if (localStorage.getItem(`patty-dirty-${recordId}`) === "1") header.setDirty(true) } catch { /* noop */ }
+  }, [recordId])
+  useEffect(() => {
+    if (!recordId) return
+    try {
+      if (header.dirty) localStorage.setItem(`patty-dirty-${recordId}`, "1")
+      else localStorage.removeItem(`patty-dirty-${recordId}`)
+    } catch { /* noop */ }
+  }, [header.dirty, recordId])
 
   const snapshotCurrent = (label: string): HistorySnapshot => ({
     label,
@@ -352,11 +449,21 @@ export function Editor() {
     cells: qc.getQueryData(["cells", recordId]),
     record: qc.getQueryData(["record", recordId]),
   })
+  const lastPush = useRef<{ label: string; at: number } | null>(null)
   const pushHistory = (label: string) => {
     const s = snapshotCurrent(label)
     // Don't push empty initial snapshots (nothing loaded yet)
     if (!s.rows && !s.cells && !s.record) return
-    useHistoryStore.getState().push(s)
+    // Coalesce rapid consecutive stamps (undo por toggle = ruido -> un paso por ráfaga)
+    const st = useHistoryStore.getState()
+    const prev = lastPush.current
+    const now = Date.now()
+    if (prev && prev.label === label && now - prev.at < 2000 && st.past.length > 0) {
+      lastPush.current = { label, at: now }
+      return
+    }
+    lastPush.current = { label, at: now }
+    st.push(s)
   }
   const applySnapshot = (s: HistorySnapshot) => {
     if (s.rows !== undefined) qc.setQueryData(["rows", recordId], s.rows)
@@ -365,6 +472,7 @@ export function Editor() {
   }
   // Brings the server to the `target` state, using `source` (previous local state) for a minimal diff.
   const syncSnapshotToServer = async (target: HistorySnapshot, source: HistorySnapshot) => {
+    if (isDraft) return // undo/redo is local-only until Guardar
     const tFilas: any[] = target.rows ?? []
     const sFilas: any[] = source.rows ?? []
     const tCeldas: any[] = target.cells ?? []
@@ -476,17 +584,26 @@ export function Editor() {
   }
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null
-      const editable = !!target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable)
       if (e.key === "Escape") {
         if (preview) { setPreview(false); return }
+        if (mPanel) { setMPanel(false); return }
         if (selCell) { setSelCell(null); return }
         return
       }
-      if ((e.ctrlKey || e.metaKey) && !editable) {
+      if ((e.ctrlKey || e.metaKey)) {
         const k = e.key.toLowerCase()
         if (k === "z" && !e.shiftKey) { e.preventDefault(); doUndo() }
         else if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); doRedo() }
+        else if (k === "s") { e.preventDefault(); saveAll() }
+        else if (k === "e" && !isDraft) { e.preventDefault(); setExportOpen((v) => !v) }
+        else if (k === "p") { e.preventDefault(); setPreview((v) => !v) }
+      } else if (e.key >= "1" && e.key <= "9" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const target = e.target as HTMLElement | null
+        const editable = !!target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable)
+        if (!editable) {
+          const n = Number(e.key) - 1
+          if (n < (record?.staff_count ?? 0)) choosePerson(n)
+        }
       }
     }
     document.addEventListener("keydown", h)
@@ -495,10 +612,12 @@ export function Editor() {
   const toggle = useMutation({
     mutationFn: async (c: any) => {
       const myColor = PERSON_COLORS[activePerson] ?? ""
-      if (!c.reviewed) return (await api.put(`/records/cells/${c.id}`, {reviewed: true, color: myColor })).data
-      const owner = PERSON_COLORS.indexOf(c.color ?? "")
-      if (owner !== activePerson) return (await api.put(`/records/cells/${c.id}`, {reviewed: true, color: myColor })).data
-      return (await api.put(`/records/cells/${c.id}`, {reviewed: false, color: "" })).data
+      return persist(async () => {
+        if (!c.reviewed) return (await api.put(`/records/cells/${c.id}`, {reviewed: true, color: myColor })).data
+        const owner = PERSON_COLORS.indexOf(c.color ?? "")
+        if (owner !== activePerson) return (await api.put(`/records/cells/${c.id}`, {reviewed: true, color: myColor })).data
+        return (await api.put(`/records/cells/${c.id}`, {reviewed: false, color: "" })).data
+      })
     },
     onMutate: async (c: any) => {
       const myColor = PERSON_COLORS[activePerson] ?? ""
@@ -517,7 +636,7 @@ export function Editor() {
   })
   // Recolor the selected cell from the panel (stamps when empty, never unstamps)
   const recolor = useMutation({
-    mutationFn: async ({ cellId, color }: { cellId: string; color: string }) => (await api.put(`/records/cells/${cellId}`, {reviewed: true, color })).data,
+    mutationFn: async ({ cellId, color }: { cellId: string; color: string }) => persist(() => api.put(`/records/cells/${cellId}`, {reviewed: true, color }).then(r => r.data)),
     onMutate: async (v: { cellId: string; color: string }) => {
       await qc.cancelQueries({ queryKey: ["cells", recordId] })
       const prev = qc.getQueryData(["cells", recordId])
@@ -532,12 +651,42 @@ export function Editor() {
     onError: (_e, _v, ctx: any) => { if (ctx?.prev) qc.setQueryData(["cells", recordId], ctx.prev) },
     onSettled: () => { qc.invalidateQueries({ queryKey: ["cells", recordId] }); qc.invalidateQueries({ queryKey: ["stats", recordId] }) },
   })
-  const addRow = useMutation({ mutationFn: async (p:any) => (await api.post(`/records/${recordId}/rows`, p)).data, onMutate: () => { pushHistory(t("editor.history.addRow")); header.setDirty(true) }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["rows", recordId] }); qc.invalidateQueries({ queryKey: ["cells", recordId] }) } })
-  const updateRow = useMutation({ mutationFn: async ({ rowId, patch }: { rowId: string; patch: any }) => (await api.put(`/records/${recordId}/rows/${rowId}`, patch)).data, onMutate: (v: any) => { pushHistory(v?.patch?.company_id !== undefined ? t("editor.history.changeCompany") : t("editor.history.editRow")); header.setDirty(true) }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["rows", recordId] }); qc.invalidateQueries({ queryKey: ["cells", recordId] }) } })
-  const deleteRow = useMutation({ mutationFn: async (rowId: string) => await api.delete(`/records/${recordId}/rows/${rowId}`), onMutate: () => { pushHistory(t("editor.history.deleteRow")); header.setDirty(true) }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["rows", recordId] }); qc.invalidateQueries({ queryKey: ["design", recordId] }) } })
-  const applyScale = useMutation({ mutationFn: async () => (await api.put(`/records/${recordId}`, {period_start: Number(scaleStart), period_end: Number(scaleEnd) })).data, onMutate: () => { pushHistory(t("editor.history.changeScale")); header.setDirty(true) }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["record", recordId] }); qc.invalidateQueries({ queryKey: ["rows", recordId] }); qc.invalidateQueries({ queryKey: ["cells", recordId] }); qc.invalidateQueries({ queryKey: ["stats", recordId] }) } })
-  const updateStaff = useMutation({ mutationFn: async (n:number) => (await api.put(`/records/${recordId}`, {staff_count: n })).data, onMutate: ()=>{ pushHistory(t("editor.history.changeStaff")); header.setDirty(true) }, onSuccess: ()=>qc.invalidateQueries({queryKey:["record",recordId]}) })
-  const saveType = (v:string) => { const txt = v.trim(); if (txt !== (record?.review_type ?? "")) { pushHistory(t("editor.history.changeType")); header.setDirty(true); api.put(`/records/${recordId}`,{review_type:txt}).then(()=>qc.invalidateQueries({queryKey:["record",recordId]})) } }
+  // Draft: apply row/record operations to local cache (mirrors server semantics)
+  const companyNameOf = (companyId?: string) =>
+    ((companies as any[]) ?? []).find((e: any) => e.id === companyId)?.name ?? ""
+  const draftApplyRow = (p: any) => {
+    const rowsNow = ((qc.getQueryData(["rows", recordId]) as any[]) ?? []).slice()
+    const name = p.company_id ? companyNameOf(p.company_id) : (p.name ?? "").trim()
+    const row = { id: `dr-${Date.now().toString(36)}-${rowsNow.length}`, record_id: "draft", company_id: p.company_id ?? null, name_snapshot: name, position: rowsNow.length, assignee: "", note: "" }
+    qc.setQueryData(["rows", recordId], [...rowsNow, row])
+  }
+  const draftApplyRowPatch = (rowId: string, patch: any) => {
+    qc.setQueryData(["rows", recordId], (old: any) => (old ?? []).map((f: any) => {
+      if (f.id !== rowId) return f
+      const next = { ...f }
+      if (patch.company_id !== undefined) {
+        next.company_id = patch.company_id || null
+        if (patch.company_id) next.name_snapshot = companyNameOf(patch.company_id)
+        else if (patch.name !== undefined) next.name_snapshot = patch.name
+      } else if (patch.name !== undefined) next.name_snapshot = patch.name
+      if (patch.assignee !== undefined) next.assignee = patch.assignee
+      if (patch.note !== undefined) next.note = patch.note
+      return next
+    }))
+  }
+  const draftDeleteRow = (rowId: string) => {
+    qc.setQueryData(["rows", recordId], (old: any) => (old ?? []).filter((f: any) => f.id !== rowId))
+    qc.setQueryData(["cells", recordId], (old: any) => (old ?? []).filter((c: any) => c.row_id !== rowId))
+  }
+  const draftApplyRecord = (patch: any) => {
+    qc.setQueryData(["record", recordId], (old: any) => ({ ...old, ...patch }))
+  }
+  const addRow = useMutation({ mutationFn: async (p:any) => persist(() => api.post(`/records/${recordId}/rows`, p).then(r => r.data)), onMutate: (p: any) => { pushHistory(t("editor.history.addRow")); header.setDirty(true); if (isDraft) draftApplyRow(p) }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["rows", recordId] }); qc.invalidateQueries({ queryKey: ["cells", recordId] }) } })
+  const updateRow = useMutation({ mutationFn: async ({ rowId, patch }: { rowId: string; patch: any }) => persist(() => api.put(`/records/${recordId}/rows/${rowId}`, patch).then(r => r.data)), onMutate: (v: any) => { pushHistory(v?.patch?.company_id !== undefined ? t("editor.history.changeCompany") : t("editor.history.editRow")); header.setDirty(true); if (isDraft) draftApplyRowPatch(v.rowId, v.patch) }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["rows", recordId] }); qc.invalidateQueries({ queryKey: ["cells", recordId] }) } })
+  const deleteRow = useMutation({ mutationFn: async (rowId: string) => persist(() => api.delete(`/records/${recordId}/rows/${rowId}`)), onMutate: (rowId: string) => { pushHistory(t("editor.history.deleteRow")); header.setDirty(true); if (isDraft) draftDeleteRow(rowId) }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["rows", recordId] }); qc.invalidateQueries({ queryKey: ["design", recordId] }) } })
+  const applyScale = useMutation({ mutationFn: async () => persist(() => api.put(`/records/${recordId}`, {period_start: Number(scaleStart), period_end: Number(scaleEnd) }).then(r => r.data)), onMutate: () => { pushHistory(t("editor.history.changeScale")); header.setDirty(true); if (isDraft) draftApplyRecord({ period_start: Number(scaleStart), period_end: Number(scaleEnd) }) }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["record", recordId] }); qc.invalidateQueries({ queryKey: ["rows", recordId] }); qc.invalidateQueries({ queryKey: ["cells", recordId] }); qc.invalidateQueries({ queryKey: ["stats", recordId] }) } })
+  const updateStaff = useMutation({ mutationFn: async (n:number) => persist(() => api.put(`/records/${recordId}`, {staff_count: n }).then(r => r.data)), onMutate: (n:number)=>{ pushHistory(t("editor.history.changeStaff")); header.setDirty(true); if (isDraft) draftApplyRecord({ staff_count: n }) }, onSuccess: (_d, n) => { qc.invalidateQueries({queryKey:["record",recordId]}); if (personIdx >= n) { choosePerson(Math.max(0, n - 1)); push({ kind: "info", title: t("editor.panel.staffShrunk", { who: `P${Math.max(1, n)}` }) }) } } })
+  const saveType = (v:string) => { const txt = v.trim(); if (txt !== (record?.review_type ?? "")) { pushHistory(t("editor.history.changeType")); header.setDirty(true); if (isDraft) draftApplyRecord({ review_type: txt }); else persist(() => api.put(`/records/${recordId}`,{review_type:txt}).then(()=>qc.invalidateQueries({queryKey:["record",recordId]}))) } }
   const isMutating = useIsMutating()
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle")
   const [validAlert, setValidAlert] = useState<any[] | null>(null)
@@ -564,11 +713,80 @@ export function Editor() {
   const orderedRows = ((rows as any[]) ?? []).slice().sort((a: any, b: any) => a.position - b.position)
   // required for save/export: every row needs a registered company (months can be filled freely)
   const missingCompany = () => orderedRows.filter((f: any) => !f.company_id).map((f: any, i: number) => ({ row: i + 1, id: f.id, field: "company", name: f.name_snapshot }))
+  const { push } = useToast()
+  // A seeded empty row carries nothing to persist (no company/name/marks/text)
+  const isPristineRow = (f: any, cellList: any[]) =>
+    !f.company_id && !(f.name_snapshot ?? "").trim() && !(f.assignee ?? "").trim() && !(f.note ?? "").trim() &&
+    !cellList.some((c: any) => c.row_id === f.id && (c.reviewed || c.color))
+  // Draft Guardar: persists the whole sheet in one chain, then lands on /editor/:id.
+  // Pristine seeded rows are skipped (backend regenerates defaults on open).
+  const saveDraft = async () => {
+    const title = ((record as any)?.title ?? "").trim()
+    if (!title) { push({ kind: "error", title: t("editor.draft.titleRequired") }); return }
+    const draftCells = ((qc.getQueryData(["cells", recordId]) as any[]) ?? [])
+    const savable = orderedRows.filter((f: any) => !isPristineRow(f, draftCells))
+    const miss = savable.filter((f: any) => !f.company_id).map((f: any) => ({ row: orderedRows.indexOf(f) + 1, id: f.id, field: "company", name: f.name_snapshot }))
+    if (miss.length) { setValidAlert(miss); return }
+    setSaveState("saving")
+    try {
+      const rec = (await api.post("/records", {
+        title,
+        review_type: (record as any)?.review_type ?? "",
+        period_start: (record as any)?.period_start ?? currentYear(),
+        period_end: (record as any)?.period_end ?? currentYear(),
+        staff_count: (record as any)?.staff_count ?? 2,
+      })).data
+      const idMap = new Map<string, string>()
+      for (const f of savable) {
+        const payload: any = f.company_id ? { company_id: f.company_id } : { name: f.name_snapshot }
+        const created = (await api.post(`/records/${rec.id}/rows`, payload)).data
+        idMap.set(f.id, created.id)
+        const patch: any = {}
+        if (f.assignee) patch.assignee = f.assignee
+        if (f.note) patch.note = f.note
+        if (Object.keys(patch).length) await api.put(`/records/${rec.id}/rows/${created.id}`, patch)
+      }
+      const fresh = (await api.get(`/records/${rec.id}/cells`)).data as any[]
+      const freshByKey = new Map(fresh.map((c: any) => [`${c.row_id}-${c.year}-${c.month}`, c]))
+      const groups = new Map<string, { reviewed: boolean; color: string; keys: string[] }>()
+      for (const c of ((qc.getQueryData(["cells", recordId]) as any[]) ?? [])) {
+        if (!c.reviewed && !c.color) continue
+        const newRowId = idMap.get(c.row_id)
+        if (!newRowId) continue
+        const gk = `${!!c.reviewed}|${c.color ?? ""}`
+        if (!groups.has(gk)) groups.set(gk, { reviewed: !!c.reviewed, color: c.color ?? "", keys: [] })
+        groups.get(gk)!.keys.push(`${newRowId}-${c.year}-${c.month}`)
+      }
+      for (const g of groups.values()) {
+        const ids = g.keys.map(k => freshByKey.get(k)?.id).filter(Boolean)
+        if (ids.length) await api.post(`/records/${rec.id}/cells/bulk`, { ids, reviewed: g.reviewed, color: g.color })
+      }
+      for (const sec of ["sheet", "table"] as const) {
+        const entry = ((qc.getQueryData(["design", recordId]) as any[]) ?? []).find((d: any) => d.section === sec)
+        if (entry && Object.keys(entry.payload ?? {}).length) {
+          await api.put(`/records/${rec.id}/layout`, { section: sec, payload: entry.payload })
+        }
+      }
+      try { localStorage.removeItem(`patty-dirty-undefined`) } catch { /* noop */ }
+      qc.invalidateQueries({ queryKey: ["records"] })
+      setSaveState("saved")
+      push({ kind: "success", title: t("common.savedOk") })
+      navigate(`/editor/${rec.id}`, { replace: true })
+    } catch {
+      setSaveState("idle")
+      push({ kind: "error", title: t("common.saveError"), actionLabel: t("common.retry"), onAction: () => saveDraft() })
+    }
+  }
   const saveAll = async () => {
+    if (isDraft) { await saveDraft(); return }
     const miss = missingCompany()
     if (miss.length) { setValidAlert(miss); return }
     setSaveState("saving")
     try {
+      // Autosave honesto: el título/tipo/escala ya hacen PUT al editar.
+      // "Revisar y cerrar" persiste el layout pendiente y revalida contra servidor.
+      const pending = (designTimers.current.sheet || designTimers.current.table)
+      if (pending) await new Promise((r) => setTimeout(r, 550))
       await Promise.all([
         qc.refetchQueries({ queryKey: ["record", recordId] }),
         qc.refetchQueries({ queryKey: ["rows", recordId] }),
@@ -576,30 +794,38 @@ export function Editor() {
         qc.refetchQueries({ queryKey: ["stats", recordId] }),
       ])
       header.set({ dirty: false } as any)
+      try { localStorage.removeItem(`patty-dirty-${recordId}`) } catch { /* noop */ }
       setSaveState("saved")
+      push({ kind: "success", title: t("common.savedOk") })
       setTimeout(() => setSaveState("idle"), 2000)
     } catch {
       setSaveState("idle")
+      push({ kind: "error", title: t("common.saveError"), actionLabel: t("common.retry"), onAction: () => saveAll() })
     }
   }
   const exportFile = async (fmt: "pdf" | "excel") => {
     const miss = missingCompany()
     if (miss.length) { setValidAlert(miss); return }
     try {
-      const r = await api.get(`/records/${recordId}/export?format=${fmt}&lang=${i18n.language}`, { responseType: "blob" }); const url = URL.createObjectURL(r.data); const a=document.createElement("a"); a.href=url; a.download=`${t("records.exportFileBase")}.${fmt==="pdf"?"pdf":"xlsx"}`; a.click(); URL.revokeObjectURL(url)
+      push({ kind: "info", title: t("common.exportOk"), desc: t("records.downloadBase") })
+      const r = await api.get(`/records/${recordId}/export?format=${fmt}&lang=${i18n.language}`, { responseType: "blob" })
+      downloadBlob(r.data, exportFilename((record as any)?.title ?? t("records.downloadBase"), fmt === "pdf" ? "pdf" : "xlsx"))
     } catch (e: any) {
       const falt = e?.response?.data?.detail?.faltantes
       if (e?.response?.status === 422 && falt) setValidAlert(falt)
+      else push({ kind: "error", title: t("common.exportError"), desc: e?.response?.data?.detail?.message ?? undefined, actionLabel: t("common.retry"), onAction: () => exportFile(fmt) })
     }
   }
-  useEffect(()=>{ if(!record) return; header.set({ recordId: record.id, title: record.title, rowCount: (rows as any)?.length ?? 0, dirty:false } as any)}, [record?.id, (record as any)?.title, (rows as any)?.length])
-  useEffect(()=>{ header.set({ onSaveTitle: (v:string)=>{ if(v!==record?.title) { pushHistory(t("editor.history.changeTitle")); api.put(`/records/${recordId}`,{title:v}).then(()=>qc.invalidateQueries({queryKey:["record",recordId]})) } }, onExport: (fmt:any)=>exportFile(fmt) } as any); return ()=>{ header.set({recordId:null} as any)}}, [recordId])
-  if (!recordId) return <div className="p-8 text-center text-[var(--text-dim)]">{t("editor.creating")}</div>
-  if (!record || !rows) return <div className="p-8 text-[var(--text-dim)]">{t("editor.loading")}</div>
+  useEffect(()=>{ if(!record || isDraft) return; header.set({ recordId: record.id, title: record.title, rowCount: (rows as any)?.length ?? 0, dirty:false } as any)}, [record?.id, (record as any)?.title, (rows as any)?.length])
+  useEffect(()=>{ if(isDraft) header.set({ rowCount: (rows as any)?.length ?? 0 } as any) }, [isDraft, (rows as any)?.length])
+  useEffect(()=>{ header.set({ onSaveTitle: (v:string)=>{ if(v!==(record as any)?.title) { pushHistory(t("editor.history.changeTitle")); header.setDirty(true); if (isDraft) draftApplyRecord({ title: v }); else persist(()=>api.put(`/records/${recordId}`,{title:v}).then(()=>qc.invalidateQueries({queryKey:["record",recordId]}))) } }, onExport: (fmt:any)=>exportFile(fmt) } as any); return ()=>{ header.set({recordId:null} as any)}}, [recordId])
+  if (!recordId && !isDraft) return <div className="flex-1 p-8 space-y-3" aria-hidden><div className="h-8 w-64 rounded-lg bg-[var(--surface-2)] animate-pulse" /><div className="h-96 rounded-xl bg-[var(--surface-2)] animate-pulse" /><span className="sr-only">{t("editor.creating")}</span></div>
+  if (recError || rowsError) return <div className="flex-1 p-8 text-center text-sm text-[var(--text-dim)]">{t("common.loadError")} <button onClick={() => { recRefetch(); rowsRefetch() }} className="text-[var(--accent)] font-medium hover:underline ml-1">{t("common.retry")}</button></div>
+  if (!record || !rows || recPending || rowsPending) return <div className="flex-1 p-8 space-y-3" aria-hidden><div className="h-8 w-64 rounded-lg bg-[var(--surface-2)] animate-pulse" /><div className="h-96 rounded-xl bg-[var(--surface-2)] animate-pulse" /><span className="sr-only">{t("editor.loading")}</span></div>
   const cellMap=new Map<string,any>(); cells?.forEach((c:any)=>cellMap.set(`${c.row_id}-${c.year}-${c.month}`,c))
   const headerBg = settings.table_header_bg && settings.table_header_bg !== "#e0e7ff" ? settings.table_header_bg : ""
   const years=Array.from({length: record.period_end - record.period_start + 1}, (_,i)=>record.period_start+i)
-  const monthSum = years.reduce((s: number, y: number) => s + MONTHS.reduce((a: number, _, mi: number) => a + (colWidths[monthKey(y, mi)] ?? 20), 0), 0)
+  const monthSum = years.reduce((s: number, y: number) => s + MONTHS.reduce((a: number, _, mi: number) => a + (colWidths[monthKey(y, mi)] ?? 34), 0), 0)
   const fixedSum = (colWidths.n ?? 44) + (colWidths.company ?? 160) + 54
     + (settings.visible_fields.assignee ? (colWidths.assignee ?? 90) : 0)
     + (settings.visible_fields.notes ? (colWidths.notes ?? 140) : 0)
@@ -610,6 +836,32 @@ export function Editor() {
   const cellList: any[] = (cells as any[]) ?? []
   const selectedCell = selCell ? cellList.find((c: any) => c.row_id === selCell.rowId && c.year === selCell.year && c.month === selCell.month) : undefined
   const selectedRowName = selCell ? ((orderedRows.find((f: any) => f.id === selCell.rowId) as any)?.name_snapshot ?? "") : ""
+  const markRow = async (rowId: string, mark: boolean) => {
+    const myColor = PERSON_COLORS[activePerson] ?? ""
+    const targets = ((qc.getQueryData(["cells", recordId]) as any[]) ?? []).filter((c: any) => c.row_id === rowId)
+    if (!targets.length) return
+    pushHistory(mark ? t("editor.history.markAs", { who: `P${activePerson + 1}` }) : t("editor.history.unmark"))
+    header.setDirty(true)
+    qc.setQueryData(["cells", recordId], (old: any) => (old ?? []).map((x: any) => x.row_id === rowId ? { ...x, reviewed: mark, color: mark ? myColor : "" } : x))
+    try {
+      await persist(() => Promise.all(targets.map((c: any) => api.put(`/records/cells/${c.id}`, { reviewed: mark, color: mark ? myColor : "" }).catch(() => null))))
+    } catch { /* best-effort */ }
+    qc.invalidateQueries({ queryKey: ["cells", recordId] })
+    qc.invalidateQueries({ queryKey: ["stats", recordId] })
+  }
+  const markYear = async (year: number, mark: boolean) => {
+    const myColor = PERSON_COLORS[activePerson] ?? ""
+    const targets = ((qc.getQueryData(["cells", recordId]) as any[]) ?? []).filter((c: any) => c.year === year)
+    if (!targets.length) return
+    pushHistory(mark ? t("editor.history.markAs", { who: `P${activePerson + 1}` }) : t("editor.history.unmark"))
+    header.setDirty(true)
+    qc.setQueryData(["cells", recordId], (old: any) => (old ?? []).map((x: any) => x.year === year ? { ...x, reviewed: mark, color: mark ? myColor : "" } : x))
+    try {
+      await persist(() => Promise.all(targets.map((c: any) => api.put(`/records/cells/${c.id}`, { reviewed: mark, color: mark ? myColor : "" }).catch(() => null))))
+    } catch { /* best-effort */ }
+    qc.invalidateQueries({ queryKey: ["cells", recordId] })
+    qc.invalidateQueries({ queryKey: ["stats", recordId] })
+  }
   const move=(idx:number,dir:-1|1)=>{
     const o=[...orderedRows]; const to=idx+dir; if(to<0||to>=o.length) return
     const tmp=o[idx]; o[idx]=o[to]; o[to]=tmp
@@ -618,7 +870,7 @@ export function Editor() {
     pushHistory(dir===-1 ? t("editor.history.moveUp") : t("editor.history.moveDown"))
     header.setDirty(true)
     qc.setQueryData(["rows",recordId], next)
-    api.post(`/records/${recordId}/rows/reorder`, {ids: next.map((f:any)=>f.id) })
+    persist(() => api.post(`/records/${recordId}/rows/reorder`, {ids: next.map((f:any)=>f.id) }))
       .catch(()=>{ if(prev) qc.setQueryData(["rows",recordId], prev) })
   }
 
@@ -635,7 +887,7 @@ export function Editor() {
           >
             <Menu size={18} />
           </button>
-          {header.recordId ? (
+          {header.recordId || isDraft ? (
             <span className="flex items-center gap-2 rounded-lg bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--border-strong)] focus-within:border-[var(--accent)] pl-2.5 pr-1 py-[3px] flex-1 min-w-0 max-w-[380px] transition shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)]">
               <Pencil size={13} className="text-[var(--text-dim)] shrink-0" aria-hidden />
               <input
@@ -655,41 +907,41 @@ export function Editor() {
           ) : (
             <span className="flex-1 min-w-0" aria-hidden />
           )}
-          <span className="hidden xl:block flex-1" aria-hidden />
-          <div className="hidden xl:flex items-center gap-1 shrink-0" role="group" aria-label={t("editor.toolbar.editGroup")}>
+          <span className="hidden lg:block flex-1" aria-hidden />
+          <div className="hidden lg:flex items-center gap-1 shrink-0" role="group" aria-label={t("editor.toolbar.editGroup")}>
             <div className="flex items-center gap-0.5" role="group" aria-label={t("editor.toolbar.orientation")}>
-              <button onClick={()=>changeOrientation("vertical")} title={t("editor.toolbar.vertical")} aria-pressed={orientation==="vertical"} className={`w-7 h-7 flex items-center justify-center rounded-full transition ${orientation==="vertical" ? "bg-[var(--surface-2)] text-[var(--text)] border border-[var(--accent-border)]" : "text-[var(--text-dim)] hover:text-[var(--text)] border border-transparent"}`}>
-                <RectangleVertical size={13}/>
+              <button onClick={()=>changeOrientation("vertical")} title={t("editor.toolbar.vertical")} aria-pressed={orientation==="vertical"} className={`w-10 h-10 flex items-center justify-center rounded-full transition ${orientation==="vertical" ? "bg-[var(--surface-2)] text-[var(--text)] border border-[var(--accent-border)]" : "text-[var(--text-dim)] hover:text-[var(--text)] border border-transparent"}`}>
+                <RectangleVertical size={15}/>
               </button>
-              <button onClick={()=>changeOrientation("horizontal")} title={t("editor.toolbar.horizontal")} aria-pressed={orientation==="horizontal"} className={`w-7 h-7 flex items-center justify-center rounded-full transition ${orientation==="horizontal" ? "bg-[var(--surface-2)] text-[var(--text)] border border-[var(--accent-border)]" : "text-[var(--text-dim)] hover:text-[var(--text)] border border-transparent"}`}>
-                <RectangleHorizontal size={13}/>
+              <button onClick={()=>changeOrientation("horizontal")} title={t("editor.toolbar.horizontal")} aria-pressed={orientation==="horizontal"} className={`w-10 h-10 flex items-center justify-center rounded-full transition ${orientation==="horizontal" ? "bg-[var(--surface-2)] text-[var(--text)] border border-[var(--accent-border)]" : "text-[var(--text-dim)] hover:text-[var(--text)] border border-transparent"}`}>
+                <RectangleHorizontal size={15}/>
               </button>
             </div>
             <span aria-hidden className="w-px h-5 bg-[var(--border)] mx-1 shrink-0" />
             <div className="flex items-center gap-0.5" role="group" aria-label={t("editor.toolbar.zoom")}>
-              <button onClick={()=>stepZoom(-1)} title={t("editor.toolbar.zoomOut")} aria-label={t("editor.toolbar.zoomOut")} className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition">
-                <Minus size={13}/>
+              <button onClick={()=>stepZoom(-1)} title={t("editor.toolbar.zoomOut")} aria-label={t("editor.toolbar.zoomOut")} className="w-10 h-10 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition">
+                <Minus size={15}/>
               </button>
-              <button onClick={()=>changeZoom(defaultZoom())} title={t("editor.toolbar.zoomReset")} className="px-1.5 text-[11px] font-mono text-[var(--text)] hover:text-[var(--text)] min-w-[42px] text-center">
+              <button onClick={()=>changeZoom(defaultZoom())} title={t("editor.toolbar.zoomReset")} className="px-1.5 text-[11px] font-mono text-[var(--text)] hover:text-[var(--text)] min-w-[44px] min-h-[44px] text-center">
                 {Math.round(zoom * 100)}%
               </button>
-              <button onClick={()=>stepZoom(1)} title={t("editor.toolbar.zoomIn")} aria-label={t("editor.toolbar.zoomIn")} className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition">
-                <Plus size={13}/>
+              <button onClick={()=>stepZoom(1)} title={t("editor.toolbar.zoomIn")} aria-label={t("editor.toolbar.zoomIn")} className="w-10 h-10 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition">
+                <Plus size={15}/>
               </button>
             </div>
             <span aria-hidden className="w-px h-5 bg-[var(--border)] mx-1 shrink-0" />
             <div className="flex items-center gap-0.5" role="group" aria-label={t("editor.toolbar.editGroup")}>
-              <button onClick={doUndo} disabled={pastLen===0} title={undoTip ? t("editor.toolbar.undoWithAction", { action: undoTip }) : t("editor.toolbar.undo") + " (Ctrl+Z)"} className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition disabled:opacity-40 disabled:hover:text-[var(--text-dim)] disabled:cursor-not-allowed" aria-label={t("editor.toolbar.undo")}><Undo2 size={13}/></button>
-              <button onClick={doRedo} disabled={futureLen===0} title={redoTip ? t("editor.toolbar.redoWithAction", { action: redoTip }) : t("editor.toolbar.redo") + " (Ctrl+Y)"} className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition disabled:opacity-40 disabled:hover:text-[var(--text-dim)] disabled:cursor-not-allowed" aria-label={t("editor.toolbar.redo")}><Redo2 size={13}/></button>
-              <button onClick={()=>{ setPreview(true); setSelCell(null) }} title={t("editor.toolbar.previewHint")} aria-label={t("editor.toolbar.preview")} aria-pressed={preview} className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition"><Eye size={13}/></button>
+              <button onClick={doUndo} disabled={pastLen===0} title={undoTip ? t("editor.toolbar.undoWithAction", { action: undoTip }) : t("editor.toolbar.undo") + " (Ctrl+Z)"} className="w-10 h-10 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition disabled:opacity-40 disabled:hover:text-[var(--text-dim)] disabled:cursor-not-allowed" aria-label={t("editor.toolbar.undo")}><Undo2 size={15}/></button>
+              <button onClick={doRedo} disabled={futureLen===0} title={redoTip ? t("editor.toolbar.redoWithAction", { action: redoTip }) : t("editor.toolbar.redo") + " (Ctrl+Y)"} className="w-10 h-10 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition disabled:opacity-40 disabled:hover:text-[var(--text-dim)] disabled:cursor-not-allowed" aria-label={t("editor.toolbar.redo")}><Redo2 size={15}/></button>
+              <button onClick={()=>{ setPreview(true); setSelCell(null) }} title={t("editor.toolbar.previewHint")} aria-label={t("editor.toolbar.preview")} aria-pressed={preview} className="w-10 h-10 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition"><Eye size={15}/></button>
             </div>
             <span aria-hidden className="w-px h-5 bg-[var(--border)] mx-1 shrink-0" />
           </div>
-          <button onClick={saveAll} disabled={isMutating > 0 || saveState === "saving"} title={t("editor.toolbar.validateSave")} className={`flex items-center gap-1.5 rounded-full px-3 h-8 text-[12px] font-medium transition border shrink-0 ${saveState === "saved" ? "bg-[var(--accent-soft)] border-[var(--accent-border)] text-[var(--success)]" : "bg-[var(--surface)] border-[var(--border)] text-[var(--text)] hover:text-[var(--text)] hover:border-[var(--accent-border)]"} disabled:opacity-50`}>
-              {saveState === "saved" ? <><Check size={13}/><span className="hidden min-[420px]:inline">{t("editor.toolbar.saved")}</span></> : saveState === "saving" ? t("editor.toolbar.saving") : <><Save size={13}/><span className="hidden min-[420px]:inline">{t("editor.toolbar.save")}</span></>}
+          <button onClick={saveAll} disabled={isMutating > 0 || saveState === "saving"} title={isDraft ? t("editor.draft.saveHint") : t("editor.toolbar.validateSave")} className={`flex items-center gap-1.5 rounded-full px-4 min-h-[44px] text-[12px] font-medium transition border shrink-0 ${!isDraft && saveState === "saved" ? "bg-[var(--accent-soft)] border-[var(--accent-border)] text-[var(--success)]" : isDraft ? "bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] border-transparent" : "bg-[var(--surface)] border-[var(--border)] text-[var(--text)] hover:text-[var(--text)] hover:border-[var(--accent-border)]"} disabled:opacity-50`}>
+              {saveState === "saved" && !isDraft ? <><Check size={13}/><span className="hidden min-[420px]:inline">{t("editor.toolbar.saved")}</span></> : saveState === "saving" ? t("editor.toolbar.saving") : <><Save size={13}/><span className="hidden min-[420px]:inline">{isDraft ? t("editor.draft.saveFile") : t("editor.toolbar.save")}</span></>}
           </button>
           <div ref={exportRef} className="relative shrink-0">
-                          <button onClick={()=>setExportOpen(!exportOpen)} title={t("editor.toolbar.export")} aria-haspopup="menu" aria-expanded={exportOpen} className="flex items-center gap-1.5 rounded-full px-3 h-8 text-[12px] font-medium bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] transition whitespace-nowrap">
+                          <button onClick={()=>setExportOpen(!exportOpen)} disabled={isDraft} title={isDraft ? t("editor.draft.exportHint") : t("editor.toolbar.export")} aria-haspopup="menu" aria-expanded={exportOpen} className="flex items-center gap-1.5 rounded-full px-4 min-h-[44px] text-[12px] font-medium bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] transition whitespace-nowrap disabled:opacity-50">
               <Download size={13}/><span className="hidden min-[420px]:inline">{t("editor.toolbar.export")}</span> <span className="text-[10px]">▾</span>
             </button>
             {exportOpen && (
@@ -699,7 +951,10 @@ export function Editor() {
               </div>
             )}
           </div>
-          <div ref={moreRef} className="relative shrink-0 xl:hidden">
+          <button onClick={()=>setMPanel(true)} title={t("editor.panel.label")} aria-label={t("editor.panel.label")} className="lg:hidden w-10 h-10 shrink-0 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface)] border border-transparent hover:border-[var(--border)] transition">
+            <Settings2 size={16}/>
+          </button>
+          <div ref={moreRef} className="relative shrink-0 lg:hidden">
             <button onClick={()=>setMoreOpen(!moreOpen)} title={t("editor.toolbar.moreTools")} aria-label={t("editor.toolbar.moreTools")} aria-haspopup="menu" aria-expanded={moreOpen} className="w-9 h-9 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface)] border border-transparent hover:border-[var(--border)] transition">
               <MoreHorizontal size={16}/>
             </button>
@@ -754,11 +1009,11 @@ export function Editor() {
               </button>
             </>
           )}
-          <div style={{ width: sheetBase.w, minHeight: sheetBase.h }} className={`max-w-none mx-auto bg-white shadow-[0_20px_60px_rgba(0,0,0,0.45)] rounded-lg overflow-hidden transition-all duration-300 relative ${preview ? "z-50 ring-2 ring-[var(--accent-border)]" : ""}`}>
-            <div className="p-6" style={{ zoom: zoom }}>
+          <div style={{ width: sheetBase.w, minHeight: sheetBase.h }} className={`max-w-none mx-auto bg-white shadow-[0_20px_60px_rgba(0,0,0,0.45)] rounded-lg overflow-hidden transition-[box-shadow,opacity] duration-200 relative ${preview ? "z-50 ring-2 ring-[var(--accent-border)]" : ""}`}>
+            <div className="p-6 origin-top-left" style={{ transform: `scale(${zoom})`, width: `${100 / zoom}%` }}>
               <div className="flex items-center gap-2 mb-3 text-xs">
                 {record.review_type ? <span className="px-2 py-1 rounded bg-[var(--sheet-soft)] border border-[var(--sheet-border)] text-[var(--sheet-ink)]">{record.review_type}</span> : null}
-                <span className="text-[var(--text-dim)]">{record.period_start} — {record.period_end} • {rows.length} rows</span>
+                <span className="text-[var(--text-dim)]">{record.period_start} — {record.period_end} • {t("editor.rowsCount", { count: (rows as any)?.length ?? 0 })}</span>
               </div>
               {settings.show_summary && stats && (
                 <div className="flex items-center gap-4 mb-4 px-3 py-2 rounded-lg bg-[var(--sheet-soft)] border border-[var(--sheet-border)] text-[11px]">
@@ -779,7 +1034,7 @@ export function Editor() {
                     </tr>
                     <tr style={{ ...(headerBg ? { background: headerBg } : null), ...(headerH ? { height: headerH } : null) }} className="bg-[var(--sheet-soft)] border-b border-[var(--sheet-border)]">
                       {years.map((y, yi)=>(
-                        <th key={y} colSpan={12} style={guideBlock && yi === years.length - 1 ? guideShadowBlock : guideShadowY(HEADER_KEY) ?? undefined} className="p-0 text-center text-[var(--sheet-ink)] font-semibold text-[11px] border-x border-[var(--sheet-border)] relative"><div className="pt-1 pb-0.5 border-b border-[var(--sheet-border)]">{y}</div><div className="flex items-stretch text-[9px] font-normal text-[var(--sheet-ink)]">{MONTHS.map((m, mi)=> {
+                        <th key={y} colSpan={12} style={guideBlock && yi === years.length - 1 ? guideShadowBlock : guideShadowY(HEADER_KEY) ?? undefined} className="p-0 text-center text-[var(--sheet-ink)] font-semibold text-[11px] border-x border-[var(--sheet-border)] relative"><div className="pt-1 pb-0.5 border-b border-[var(--sheet-border)] flex items-center justify-center gap-1">{y}{!preview && <button onClick={() => markYear(y, true)} onContextMenu={(e) => { e.preventDefault(); markYear(y, false) }} title={`${t("editor.table.markYear", { year: y })} · clic derecho: ${t("editor.table.unmarkYear", { year: y })}`} aria-label={t("editor.table.markYear", { year: y })} className="w-6 h-6 grid place-items-center rounded text-[10px] text-[var(--sheet-ink)]/60 hover:text-[var(--sheet-ink)] hover:bg-[var(--sheet-soft)]">✓</button>}</div><div className="flex items-stretch text-[10px] font-medium tracking-wide text-[var(--sheet-ink)]">{MONTHS.map((m, mi)=> {
                           const mk = monthKey(y, mi)
                           return <span key={`${y}-${mi}-${m}`} style={{ ...monthStyle(mk), ...guideShadowX(mk), ...(guideRow(HEADER_KEY) ? { borderLeftColor: GUIDE } : null) }} className={`${monthClass(mk)} flex items-center justify-center ${mi === 0 ? "border-l-0" : "border-l border-[var(--sheet-border)]"}`}>{m}{!preview && <DragHandle axis="x" title={t("editor.resize.monthWidth")} zoom={zoom} startV={colWidths[mk] ?? 20} min={16} onV={(w)=>resizeCol(mk, w)} onReset={()=>resetCol(mk)} {...guideProps("x", mk)} />}</span>
                         })}</div>
@@ -796,13 +1051,13 @@ export function Editor() {
                         <tr key={row.id} style={rowHeights[row.id] ? { height: rowHeights[row.id] } : undefined} className="border-t border-b border-[var(--sheet-border)] hover:bg-[var(--sheet-soft)]">
                           <td className="p-2 text-center text-[var(--text-dim)] text-xs relative group border-x border-[var(--sheet-border)]" style={{ ...colStyle("n"), ...guideShadowX("n"), ...guideShadowY(row.id) }}>
                             {idx+1}
-                            {!preview && <RowMenu row={row} idx={idx} total={orderedRows.length} onMove={(dir)=>move(idx,dir)} onDelete={()=>deleteRow.mutate(row.id)} />}
+                            {!preview && <RowMenu row={row} idx={idx} total={orderedRows.length} onMove={(dir)=>move(idx,dir)} onDelete={()=>deleteRow.mutate(row.id)} onMarkRow={(mark)=>markRow(row.id, mark)} />}
                             {!preview && <DragHandle axis="y" title={t("editor.resize.rowHeight")} zoom={zoom} startV={rowHeights[row.id] ?? 33} min={28} onV={(h)=>resizeRow(row.id, h)} onReset={()=>resetRow(row.id)} {...guideProps("y", row.id)} />}
                           </td>
                           <td className="p-2 relative text-center border-x border-[var(--sheet-border)]" style={{ ...colStyle("company"), ...guideShadowX("company"), ...guideShadowY(row.id) }}>
-                            <button disabled={preview} onClick={()=>setPickRowId(pickRowId===row.id?null:row.id)} title={row.name_snapshot ? t("editor.table.changeCompany") : t("editor.table.chooseCompany")} className={`rounded px-2 h-7 w-full text-xs flex items-center gap-1 border border-transparent hover:border-[var(--sheet-border)] hover:bg-[var(--sheet-soft)] disabled:hover:border-transparent disabled:hover:bg-transparent disabled:cursor-default ${row.name_snapshot ? "font-medium text-[#1e293b]" : ""}`}>
-                              <span className="flex-1 text-left truncate">{row.name_snapshot || " "}</span>
-                              <span className={`text-[10px] ml-auto ${row.name_snapshot ? "text-[var(--text-dim)]" : "text-[var(--text-dim)]"}`}>▾</span>
+                            <button disabled={preview} onClick={()=>setPickRowId(pickRowId===row.id?null:row.id)} title={row.name_snapshot ? t("editor.table.changeCompany") : t("editor.table.chooseCompany")} aria-haspopup="listbox" aria-expanded={pickRowId===row.id} className={`rounded px-2 h-8 w-full text-xs flex items-center gap-1 border hover:border-[var(--sheet-border)] hover:bg-[var(--sheet-soft)] disabled:hover:border-transparent disabled:hover:bg-transparent disabled:cursor-default ${row.name_snapshot ? "font-medium text-[#1e293b] border-transparent" : "border-dashed border-[var(--sheet-border)] text-[var(--text-dim)]"}`}>
+                              <span className="flex-1 text-left truncate">{row.name_snapshot || `${t("editor.table.chooseCompany")} ▾`}</span>
+                              <span className="text-[10px] ml-auto text-[var(--text-dim)]">▾</span>
                             </button>
                             {pickRowId===row.id && companies && <CompanyPicker row={row} companies={companies} onClose={()=>setPickRowId(null)} onSelect={async(v)=>{ await updateRow.mutateAsync({ rowId: row.id, patch: v as any }); setPickRowId(null) }} />}
                           </td>
@@ -813,12 +1068,12 @@ export function Editor() {
                                   const c = cellMap.get(`${row.id}-${y}-${mi+1}`)
                                   const mk = monthKey(y, mi)
                                   const accentL = guideRow(row.id) ? { borderLeftColor: GUIDE } : null
-                                  if(!c) return <span key={mi} style={{ ...monthStyle(mk), ...accentL, ...guideShadowY(row.id) }} className={`${monthClass(mk)} grid place-items-center py-2 ${mi === 0 ? "border-l-0" : "border-l border-[var(--sheet-border)]"}`} title={t("editor.table.loadingMonth")}><input type="checkbox" disabled aria-label={t("editor.table.loadingMonthAria")} className="w-4 h-4 accent-[var(--sheet-accent)] opacity-60" /></span>
+                                   if(!c) return <span key={mi} style={{ ...monthStyle(mk), ...accentL, ...guideShadowY(row.id) }} className={`${monthClass(mk)} grid place-items-center py-2 ${mi === 0 ? "border-l-0" : "border-l border-[var(--sheet-border)]"}`} title={t("editor.table.loadingMonth")}><input type="checkbox" disabled aria-label={t("editor.table.loadingMonthAria")} className="w-6 h-6 accent-[var(--sheet-accent)] opacity-60" /></span>
                                   const owner = ownerOf(c.color)
                                   const isMine = owner === activePerson
                                   const selected = !preview && selCell?.rowId === row.id && selCell?.year === y && selCell?.month === mi + 1
                                   return <label key={mi} data-sel-zone onClick={(e)=>{ if ((e.target as HTMLElement).tagName === "INPUT") return; e.preventDefault(); setSelCell((s) => (s && s.rowId === row.id && s.year === y && s.month === mi + 1 ? null : { rowId: row.id, year: y, month: mi + 1 })) }} style={{ ...monthStyle(mk), ...accentL, ...guideShadowY(row.id), ...(selected ? { backgroundColor: "var(--accent-soft)", boxShadow: "inset 0 0 0 2px var(--accent)" } : null) }} className={`${monthClass(mk)} grid place-items-center py-2 h-full ${mi === 0 ? "border-l-0" : "border-l border-[var(--sheet-border)]"} cursor-pointer hover:bg-[var(--sheet-soft)]`} title={c.reviewed ? (owner >= 0 && !isMine ? t("editor.table.markedBy", { who: `P${owner + 1}`, me: `P${activePerson + 1}` }) : t("editor.table.markedGeneric")) : t("editor.table.markAsWho", { who: `P${activePerson + 1}` })}>
-                                    <input type="checkbox" aria-label={t("editor.table.monthAria", { month: mi + 1, year: y })} checked={!!c.reviewed} onChange={()=>{ toggle.mutate(c); setSelCell(null) }} style={c.color ? { accentColor: c.color } : undefined} className="w-4 h-4 accent-[var(--sheet-accent)] cursor-pointer" />
+                                    <input type="checkbox" aria-label={t("editor.table.monthAria", { month: MONTHS[mi] ?? mi + 1, year: y })} checked={!!c.reviewed} onChange={()=>{ toggle.mutate(c); setSelCell(null) }} style={c.color ? { accentColor: c.color } : undefined} className="w-6 h-6 accent-[var(--sheet-accent)] cursor-pointer" />
                                   </label>
                                 })}
                               </div>
@@ -850,9 +1105,10 @@ export function Editor() {
         </div>
       </div>
 
-      {/* Right Panel fusionado — 2 subpestañas, colapsable */}
-      <div className={`${rightCollapsed ? "w-[56px]" : "w-[320px]"} bg-[var(--bg)] border-l border-[var(--border)] flex flex-col shrink-0 overflow-hidden hidden xl:flex transition-all duration-300`}>
-        {rightCollapsed ? (
+      {/* Right Panel fusionado — 2 subpestañas, colapsable; drawer en <lg */}
+      {mPanel && <div className="fixed inset-0 z-30 bg-black/60 lg:hidden" onClick={() => setMPanel(false)} aria-hidden />}
+      <div className={`${rightCollapsed && !mPanel ? "lg:w-[56px]" : "lg:w-[320px]"} fixed lg:static inset-y-0 right-0 z-40 w-[min(320px,85vw)] bg-[var(--bg)] border-l border-[var(--border)] flex-col shrink-0 overflow-hidden ${mPanel ? "flex" : "hidden"} lg:flex transition-[width,transform,opacity] duration-200`}>
+        {(rightCollapsed && !mPanel) ? (
           <div className="flex flex-col items-center gap-2 py-3">
             <button onClick={()=>setRightCollapsed(false)} title={t("editor.panel.expandWithTab", { tab: panelTab === "table" ? t("editor.panel.tableTab") : t("editor.panel.designTab") })} aria-label={t("editor.panel.expand")} className="group/panel relative w-9 h-9 rounded-xl hover:bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--text)] transition">
               {panelTab === "table" ? <Table2 size={16} className="transition-opacity duration-150 group-hover/panel:opacity-0" /> : <Palette size={16} className="transition-opacity duration-150 group-hover/panel:opacity-0" />}
@@ -873,7 +1129,7 @@ export function Editor() {
         <div className="px-3 pt-3 shrink-0">
           <div className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text)] px-1 mb-2">
             <Settings2 size={14}/> {t("editor.panel.label")}
-            <button onClick={()=>setRightCollapsed(true)} title={t("editor.panel.collapse")} className="ml-auto w-7 h-7 rounded-lg hover:bg-[var(--surface)] border border-transparent hover:border-[var(--border)] flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--text)] transition">
+            <button onClick={()=>setRightCollapsed(true)} title={t("editor.panel.collapse")} className="ml-auto w-10 h-10 rounded-lg hover:bg-[var(--surface)] border border-transparent hover:border-[var(--border)] flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--text)] transition">
               <PanelRightClose size={14}/>
             </button>
           </div>
@@ -907,7 +1163,8 @@ export function Editor() {
               <div className="flex-1"><label className="text-[10px] text-[var(--text-dim)]">{t("editor.panel.start")}</label><NumberStepper ariaLabel={t("editor.panel.start")} value={scaleStart} onChange={setScaleStart} className="mt-1 w-full" /></div>
               <div className="flex-1"><label className="text-[10px] text-[var(--text-dim)]">{t("editor.panel.end")}</label><NumberStepper ariaLabel={t("editor.panel.end")} value={scaleEnd} onChange={setScaleEnd} className="mt-1 w-full" /></div>
             </div>
-            <Button onClick={()=>applyScale.mutate()} disabled={applyScale.isPending || scaleStart>scaleEnd} className="w-full h-7 bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] text-xs rounded-full">{t("editor.panel.applyScale")}</Button>
+            <Button onClick={()=>applyScale.mutate()} disabled={applyScale.isPending || scaleStart>scaleEnd} title={scaleStart>scaleEnd ? t("editor.panel.badScale") : undefined} className="w-full min-h-[44px] bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] text-xs rounded-full">{t("editor.panel.applyScale")}</Button>
+            {scaleStart>scaleEnd && <p role="alert" className="text-[11px] text-[var(--danger)]">{t("editor.panel.badScale")}</p>}
             <div className="flex items-center gap-2 pt-1">
               <Users size={12} className="text-[var(--text-dim)] shrink-0" />
               <NumberStepper dense ariaLabel={t("editor.panel.staffAria")} min={1} max={10} value={record.staff_count ?? 2} onChange={(n)=>{ updateStaff.mutate(n)}} className="w-[104px]" />
@@ -957,8 +1214,8 @@ export function Editor() {
             <div className="flex justify-between text-xs"><span className="text-[var(--text-dim)]">{t("editor.panel.total")}</span><span className="text-[var(--text)] font-medium">{t("editor.panel.totalMeta", { rows: rows.length, years: years.length })}</span></div>
             <div className="border-t border-[var(--border)] pt-2 space-y-2">
               <div className="text-[10px] text-[var(--text-dim)]">{t("editor.panel.visibleColumns")}</div>
-              <label className="flex items-center justify-between text-xs text-[var(--text-dim)] cursor-pointer">{t("editor.panel.responsible")}<input type="checkbox" checked={settings.visible_fields.assignee} onChange={e=>settings.set({visible_fields:{...settings.visible_fields,assignee:e.target.checked}})} className="w-4 h-4 accent-[var(--sheet-accent)] cursor-pointer" /></label>
-              <label className="flex items-center justify-between text-xs text-[var(--text-dim)] cursor-pointer">{t("editor.panel.notes")}<input type="checkbox" checked={settings.visible_fields.notes} onChange={e=>settings.set({visible_fields:{...settings.visible_fields,notes:e.target.checked}})} className="w-4 h-4 accent-[var(--sheet-accent)] cursor-pointer" /></label>
+              <label className="flex items-center justify-between text-xs text-[var(--text-dim)] cursor-pointer min-h-[44px]">{t("editor.panel.responsible")}<input type="checkbox" checked={settings.visible_fields.assignee} onChange={e=>settings.set({visible_fields:{...settings.visible_fields,assignee:e.target.checked}})} className="w-6 h-6 accent-[var(--sheet-accent)] cursor-pointer" /></label>
+              <label className="flex items-center justify-between text-xs text-[var(--text-dim)] cursor-pointer min-h-[44px]">{t("editor.panel.notes")}<input type="checkbox" checked={settings.visible_fields.notes} onChange={e=>settings.set({visible_fields:{...settings.visible_fields,notes:e.target.checked}})} className="w-6 h-6 accent-[var(--sheet-accent)] cursor-pointer" /></label>
             </div>
           </div>
           </>
@@ -967,10 +1224,10 @@ export function Editor() {
           <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-3 space-y-3">
             <div className="text-[12px] font-medium text-[var(--text)] flex items-center gap-1.5"><Palette size={12}/> {t("editor.panel.styles")}</div>
             <div className="flex items-center justify-between"><span className="text-[11px] text-[var(--text-dim)]">{t("editor.panel.sheetColor")}</span><Button onClick={()=>settings.set({primary_color:""})} aria-pressed={!settings.primary_color || ["#6366f1","#EC4899","#ec4899"].includes(settings.primary_color)} title={t("editor.panel.followAccent")} className="h-6 px-2.5 rounded-full text-[11px] bg-[var(--surface-2)] text-[var(--text-dim)] hover:text-[var(--text)] border border-[var(--border)]">{t("editor.panel.auto")}</Button></div>
-            <div className="flex items-center justify-between"><span className="text-[11px] text-[var(--text-dim)]">{t("editor.panel.custom")}</span><div className="flex items-center gap-1.5 bg-[var(--bg)] border border-[var(--border)] rounded-lg px-2 py-1 w-[148px] justify-between relative"><span className="w-4 h-4 rounded" style={{background: settings.primary_color || "var(--accent)"}}/><span className="text-[11px] text-[var(--text)]">{settings.primary_color || t("editor.panel.themed")}</span><input type="color" aria-label={t("editor.panel.customSheetColor")} value={settings.primary_color || "#EC4899"} onChange={e=>settings.set({primary_color:e.target.value})} className="absolute inset-0 opacity-0 cursor-pointer" /></div></div>
+            <div className="flex items-center justify-between"><span className="text-[11px] text-[var(--text-dim)]">{t("editor.panel.custom")}</span><div className="flex items-center gap-1.5 bg-[var(--bg)] border border-[var(--border)] focus-within:border-[var(--accent)] rounded-lg px-2 py-1 w-[148px] justify-between relative"><span className="w-4 h-4 rounded" style={{background: settings.primary_color || "var(--accent)"}}/><span className="text-[11px] text-[var(--text)]">{settings.primary_color || t("editor.panel.themed")}</span><input type="color" aria-label={t("editor.panel.customSheetColor")} value={settings.primary_color || "#EC4899"} onChange={e=>settings.set({primary_color:e.target.value})} className="absolute inset-0 opacity-0 cursor-pointer" /></div></div>
             <div className="flex gap-1.5 flex-wrap">
               {["#EC4899","#8b5cf6","#06b6d4","#10b981","#f59e0b","#ef4444"].map(c=>(
-                <button key={c} title={c} aria-label={t("editor.panel.colorValue", { hex: c })} aria-pressed={settings.primary_color===c} onClick={()=>settings.set({primary_color:c})} className="w-7 h-7 rounded-full border-2" style={{background:c, borderColor: settings.primary_color===c ? "white" : "var(--border)", boxShadow: settings.primary_color===c ? "0 0 0 2px var(--accent)" : "none"}}/>
+                <button key={c} title={c} aria-label={t("editor.panel.colorValue", { hex: c })} aria-pressed={settings.primary_color===c} onClick={()=>settings.set({primary_color:c})} className="w-10 h-10 rounded-full border-2" style={{background:c, borderColor: settings.primary_color===c ? "white" : "var(--border)", boxShadow: settings.primary_color===c ? "0 0 0 2px var(--accent)" : "none"}}/>
               ))}
             </div>
           </div>
@@ -1006,8 +1263,10 @@ export function Editor() {
             <p className="text-xs text-[var(--text-dim)] mb-3">{t("editor.validation.missingDesc")}</p>
             <ul className="max-h-[220px] overflow-auto space-y-1.5 mb-4">
               {validAlert.map((m:any)=>(
-                <li key={m.id} className="text-xs px-3 py-2 rounded-lg bg-[var(--sheet-soft)] border border-[var(--sheet-border)]">
-                  {t("editor.validation.rowNoCompany", { row: m.row, name: m.name })}
+                <li key={m.id}>
+                  <button onClick={() => { setPickRowId(m.id); setValidAlert(null) }} className="w-full text-left text-xs px-3 py-2.5 rounded-lg bg-[var(--sheet-soft)] border border-[var(--sheet-border)] hover:border-[var(--accent-border)]">
+                    {t("editor.validation.rowNoCompany", { row: m.row, name: m.name })}
+                  </button>
                 </li>
               ))}
             </ul>

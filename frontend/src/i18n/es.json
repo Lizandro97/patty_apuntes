@@ -1,7 +1,16 @@
 {
   "common": {
     "increase": "Aumentar",
-    "decrease": "Disminuir"
+    "decrease": "Disminuir",
+    "open": "Abrir",
+    "retry": "Reintentar",
+    "close": "Cerrar",
+    "loading": "Cargando…",
+    "loadError": "No se pudo cargar. Revisa tu conexión.",
+    "savedOk": "Cambios al día",
+    "saveError": "No se pudo guardar",
+    "exportOk": "Descarga lista",
+    "exportError": "No se pudo exportar"
   },
   "nav": {
     "brand": "Patty apuntes",
@@ -30,12 +39,17 @@
     "companies": "Empresas",
     "status": "Estado",
     "synced": "Sincronizado",
+    "notSynced": "Sin conexión — reintenta",
     "recentActivity": "Actividad reciente",
-    "empty": "Aún no hay archivos. Crea tu primera revisión en el Editor."
+    "empty": "Aún no hay archivos. Crea tu primera revisión en el Editor.",
+    "guideTitle": "Cómo empezar",
+    "guideSteps": "1) Crea empresas · 2) Crea un archivo · 3) Elige empresa por fila y marca meses",
+    "openFile": "Abrir",
+    "progressLabel": "Progreso {{progress}}%"
   },
   "records": {
     "title": "Archivos",
-    "subtitle": "Clic en una fila para abrirla en el editor",
+    "subtitle": "Clic en el nombre para abrirlo en el editor",
     "newTitlePlaceholder": "Título nuevo archivo",
     "createAndOpen": "Crear y abrir",
     "searchPlaceholder": "Buscar archivos...",
@@ -68,7 +82,12 @@
     "notUpdated": "—",
     "exportFileBase": "revision",
     "downloadBase": "archivo",
-    "delete": "Eliminar"
+    "delete": "Eliminar",
+    "openFileAria": "Abrir {{title}} en el editor",
+    "rowActions": "Acciones de {{title}}",
+    "downloadTitle": "Descargar «{{title}}»",
+    "deleteTitle": "¿Eliminar «{{title}}»?",
+    "deleteDesc": "Se borrará el archivo con sus filas y meses."
   },
   "companies": {
     "title": "Empresas",
@@ -99,24 +118,26 @@
     "saveToServer": "Guardar en servidor",
     "reset": "Restablecer",
     "saved": "✓ Guardado",
+    "saveError": "No se pudo guardar en el servidor",
+    "tableNote": "Densidad, resumen y columnas visibles se ajustan en el panel Tabla del Editor.",
     "language": "Idioma",
     "spanish": "Español",
     "english": "English"
   },
   "editor": {
     "months": [
-      "E",
-      "F",
-      "M",
-      "A",
-      "M",
-      "J",
-      "J",
-      "A",
-      "S",
-      "O",
-      "N",
-      "D"
+      "ENE",
+      "FEB",
+      "MAR",
+      "ABR",
+      "MAY",
+      "JUN",
+      "JUL",
+      "AGO",
+      "SEP",
+      "OCT",
+      "NOV",
+      "DIC"
     ],
     "creating": "Creando...",
     "loading": "Cargando...",
@@ -125,6 +146,12 @@
     "savedStatus": "Guardado",
     "unsavedStatus": "Sin guardar",
     "rowsCount": "{{count}} filas",
+    "draft": {
+      "saveFile": "Guardar archivo",
+      "saveHint": "Guardar este archivo nuevo en el servidor",
+      "exportHint": "Guarda el archivo antes de exportar",
+      "titleRequired": "Ponle un título al archivo antes de guardar"
+    },
     "toolbar": {
       "label": "Barra del editor",
       "orientation": "Orientación de hoja",
@@ -141,10 +168,10 @@
       "redoWithAction": "Rehacer: {{action}} (Ctrl+Y)",
       "preview": "Vista previa",
       "previewHint": "Vista previa (solo hoja)",
-      "validateSave": "Validar y guardar",
-      "saved": "Guardado",
-      "saving": "Guardando...",
-      "save": "Guardar",
+      "validateSave": "Revisar y cerrar",
+      "saved": "Al día",
+      "saving": "Revisando...",
+      "save": "Revisar y cerrar",
       "export": "Exportar",
       "downloadPdf": "Descargar PDF",
       "downloadExcel": "Descargar Excel",
@@ -170,6 +197,8 @@
       "start": "Inicio",
       "end": "Fin",
       "applyScale": "Aplicar escala",
+      "badScale": "El inicio no puede ser mayor que el fin",
+      "staffShrunk": "Personal reducido — tu color activo cambió a {{who}}",
       "staffAria": "Cantidad de personal",
       "total": "Total",
       "totalMeta": "{{rows}} · {{years}} años",
@@ -231,7 +260,11 @@
       "markedGeneric": "Marcado · clic en el check para desmarcar",
       "markAsWho": "Marcar como {{who}}",
       "addRow": "Agregar fila",
-      "defaultRowName": "Fila {{n}}"
+      "defaultRowName": "Fila {{n}}",
+      "markRow": "Marcar fila",
+      "unmarkRow": "Desmarcar fila",
+      "markYear": "Marcar {{year}}",
+      "unmarkYear": "Desmarcar {{year}}"
     },
     "validation": {
       "missingTitle": "Faltan campos para guardar/exportar",
@@ -275,7 +308,7 @@
       "statExport": "Export",
       "statExportV": "PDF · Excel",
       "previewCaption": "Vista previa — Editor vivo",
-      "previewHint": "Marca con clic · clic derecho colorea",
+      "previewHint": "Marca con clic · elige tu color (P1…) en el panel Tabla",
       "footerTag": "Papel, orden y calma — hecho para Patty",
       "access": "Acceso",
       "welcome": "Bienvenida de nuevo",

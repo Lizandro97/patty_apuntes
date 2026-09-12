@@ -2,68 +2,138 @@ import { useSettingsStore } from "@/stores/settings"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { api } from "@/lib/api"
+import { useToast } from "@/lib/toast"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { applyLanguage, type AppLang } from "@/i18n"
 
+const SWATCHES = ["#EC4899", "#0ea5e9", "#8b5cf6", "#f97316", "#eab308", "#10b981", "#0E7C5B"]
+
 export function Settings() {
   const { t } = useTranslation()
+  const { push } = useToast()
   const settings = useSettingsStore()
-  const [saved,setSaved]=useState(false)
-  const [lang,setLang]=useState<AppLang>("es")
-  useEffect(()=>{
-    api.get("/settings").then(r=> {
+  const [lang, setLang] = useState<AppLang>("es")
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [dirty, setDirty] = useState(false)
+
+  useEffect(() => {
+    setLoading(true)
+    api.get("/settings").then(r => {
       settings.set(r.data)
       if (r.data?.language === "es" || r.data?.language === "en") setLang(r.data.language)
-    }).catch(()=>{})
-  },[])
-  const save = async()=>{
-    await api.put("/settings", {
-      primary_color: settings.primary_color,
-      font_family: settings.font_family,
-      font_size_px: settings.font_size_px,
-      table_density: settings.table_density,
-      grid_columns: settings.grid_columns,
-      show_summary: settings.show_summary,
-      rounded_borders: settings.rounded_borders,
-      pastel_mode: settings.pastel_mode,
-      visible_fields: settings.visible_fields,
-      language: lang,
-    }).catch(()=>{})
-    applyLanguage(lang)
-    setSaved(true); setTimeout(()=>setSaved(false),2000)
+      setLoadError(false)
+    }).catch(() => setLoadError(true)).finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const markDirty = (fn: () => void) => { fn(); setDirty(true) }
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      await api.put("/settings", {
+        primary_color: settings.primary_color,
+        font_family: settings.font_family,
+        font_size_px: settings.font_size_px,
+        table_density: settings.table_density,
+        grid_columns: settings.grid_columns,
+        show_summary: settings.show_summary,
+        rounded_borders: settings.rounded_borders,
+        pastel_mode: settings.pastel_mode,
+        visible_fields: settings.visible_fields,
+        language: lang,
+      })
+      applyLanguage(lang)
+      setDirty(false)
+      push({ kind: "success", title: t("settings.saved") })
+    } catch {
+      push({ kind: "error", title: t("settings.saveError"), actionLabel: t("common.retry"), onAction: () => save() })
+    } finally {
+      setSaving(false)
+    }
   }
+
+  const resetAll = async () => {
+    settings.reset()
+    setLang("es")
+    try {
+      await api.put("/settings", {
+        primary_color: "", font_family: "Inter", font_size_px: 14,
+        table_density: "normal", grid_columns: 3, show_summary: true,
+        rounded_borders: true, pastel_mode: true,
+        visible_fields: { names: true, assignee: true, date: true, notes: true },
+        language: "es",
+      })
+      applyLanguage("es")
+      setDirty(false)
+      push({ kind: "success", title: t("settings.saved") })
+    } catch {
+      push({ kind: "error", title: t("settings.saveError") })
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex-1 bg-[var(--bg)] p-6 overflow-auto">
+        <div className="max-w-[800px] mx-auto space-y-4" aria-hidden>
+          <div className="h-8 w-48 rounded-lg bg-[var(--surface-2)] animate-pulse" />
+          <div className="h-64 rounded-xl bg-[var(--surface-2)] animate-pulse" />
+          <span className="sr-only">{t("common.loading")}</span>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex-1 bg-[var(--bg)] p-6 overflow-auto">
       <div className="max-w-[800px] mx-auto space-y-4">
         <h1 className="text-[22px] font-bold text-[var(--text)]">{t("settings.title")}</h1>
         <p className="text-sm text-[var(--text-dim)]">{t("settings.subtitle")}</p>
+        {loadError && <p role="alert" className="text-sm text-[var(--danger)]">{t("common.loadError")}</p>}
         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6 space-y-6">
           <div>
-            <h3 className="font-medium text-[var(--text)] mb-3">{t("settings.primaryColor")}</h3>
-            <div className="flex gap-2 items-center">
-              {["#EC4899","#0ea5e9","#8b5cf6","#ec4899","#f97316","#eab308","#10b981"].map(c=> (
-                <button key={c} title={c} aria-label={t("settings.colorName", { hex: c })} aria-pressed={settings.primary_color===c} onClick={()=>settings.set({primary_color:c})} className="w-8 h-8 rounded-full border-2" style={{background:c, borderColor: settings.primary_color===c?"white":"var(--border)"}} />
+            <h3 id="sw-label" className="font-medium text-[var(--text)] mb-3">{t("settings.primaryColor")}</h3>
+            <div className="flex gap-2 items-center flex-wrap" role="group" aria-labelledby="sw-label">
+              {SWATCHES.map(c => (
+                <button key={c} title={c} aria-label={t("settings.colorName", { hex: c })} aria-pressed={settings.primary_color.toLowerCase() === c.toLowerCase()} onClick={() => markDirty(() => settings.set({ primary_color: c }))} className="w-11 h-11 rounded-full border-2 grid place-items-center" style={{ background: c, borderColor: settings.primary_color.toLowerCase() === c.toLowerCase() ? "var(--accent)" : "var(--border)" }}>
+                  {settings.primary_color.toLowerCase() === c.toLowerCase() && <span aria-hidden className="text-white text-sm font-bold">✓</span>}
+                </button>
               ))}
-              <Input type="color" aria-label={t("settings.primaryColor")} value={settings.primary_color} onChange={e=>settings.set({primary_color:e.target.value})} className="w-12 h-8 p-1 bg-[var(--bg)] border-[var(--border)]" />
-              <span className="text-xs text-[var(--text-dim)]">{settings.primary_color}</span>
+              <span className="relative inline-flex w-11 h-11 rounded-full border-2 overflow-hidden" style={{ borderColor: "var(--border)" }} title={t("settings.primaryColor")}>
+                <span aria-hidden className="absolute inset-0 grid place-items-center text-lg text-[var(--text-dim)]">+</span>
+                <Input type="color" aria-label={t("settings.primaryColor")} value={/^#[0-9a-f]{6}$/i.test(settings.primary_color) ? settings.primary_color : "#EC4899"} onChange={e => markDirty(() => settings.set({ primary_color: e.target.value }))} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+              </span>
+              <span className="text-xs text-[var(--text-dim)]" aria-live="polite">{settings.primary_color || t("editor.panel.auto")}</span>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div><label className="text-xs text-[var(--text-dim)]">{t("settings.font")}</label><select aria-label={t("settings.font")} value={settings.font_family} onChange={e=>settings.set({font_family:e.target.value})} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 mt-1 text-sm text-[var(--text)]"><option>Inter</option><option>Geist</option></select></div>
-            <div><label className="text-xs text-[var(--text-dim)]">{t("settings.size")}</label><select aria-label={t("settings.size")} value={settings.font_size_px} onChange={e=>settings.set({font_size_px: Number(e.target.value)})} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 mt-1 text-sm text-[var(--text)]"><option value={12}>{t("settings.px", { n: 12 })}</option><option value={14}>{t("settings.px", { n: 14 })}</option></select></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="set-font" className="text-xs text-[var(--text-dim)]">{t("settings.font")}</label>
+              <select id="set-font" value={settings.font_family} onChange={e => markDirty(() => settings.set({ font_family: e.target.value }))} className="w-full min-h-[44px] bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 mt-1 text-sm text-[var(--text)]">
+                <option>Inter</option><option>Geist</option><option value="system-ui">System</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="set-size" className="text-xs text-[var(--text-dim)]">{t("settings.size")}</label>
+              <select id="set-size" value={settings.font_size_px} onChange={e => markDirty(() => settings.set({ font_size_px: Number(e.target.value) }))} className="w-full min-h-[44px] bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 mt-1 text-sm text-[var(--text)]">
+                <option value={12}>{t("settings.px", { n: 12 })}</option><option value={14}>{t("settings.px", { n: 14 })}</option><option value={16}>{t("settings.px", { n: 16 })}</option>
+              </select>
+            </div>
           </div>
           <div>
-            <label className="text-xs text-[var(--text-dim)]">{t("settings.language")}</label>
-            <select aria-label={t("settings.language")} value={lang} onChange={e=>setLang(e.target.value as AppLang)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 mt-1 text-sm text-[var(--text)]">
+            <label htmlFor="set-lang" className="text-xs text-[var(--text-dim)]">{t("settings.language")}</label>
+            <select id="set-lang" value={lang} onChange={e => { setLang(e.target.value as AppLang); setDirty(true) }} className="w-full min-h-[44px] bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 mt-1 text-sm text-[var(--text)]">
               <option value="es">{t("settings.spanish")}</option>
               <option value="en">{t("settings.english")}</option>
             </select>
           </div>
-          <div className="flex gap-2">
-            <Button onClick={save} className="bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] rounded-lg">{t("settings.saveToServer")}</Button>
-            <Button variant="outline" onClick={()=>settings.reset()} className="bg-[var(--bg)] border-[var(--border)] text-[var(--text-dim)] rounded-lg">{t("settings.reset")}</Button>
-            {saved && <span className="text-sm text-[var(--success)] self-center">{t("settings.saved")}</span>}
+          <p className="text-xs text-[var(--text-dim)]">{t("settings.tableNote")}</p>
+          <div className="flex gap-2 items-center flex-wrap">
+            <Button onClick={save} disabled={saving || !dirty} className="min-h-[44px] rounded-lg">{saving ? t("common.loading") : t("settings.saveToServer")}</Button>
+            <Button variant="outline" onClick={resetAll} className="min-h-[44px] rounded-lg">{t("settings.reset")}</Button>
           </div>
         </div>
       </div>

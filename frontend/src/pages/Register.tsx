@@ -6,18 +6,19 @@ import { apiError } from "@/lib/errors"
 import { useNavigate, Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useAuthStore } from "@/stores/auth"
 import { useTranslation } from "react-i18next"
-import { ArrowUpRight, Leaf } from "lucide-react"
+import { ArrowUpRight, Eye, EyeOff, Leaf } from "lucide-react"
 
 export function Register() {
   const { t } = useTranslation()
-  const schema = z.object({ full_name: z.string().min(2, t("auth.register.minName")), email: z.string().email(t("auth.register.invalidEmail")), password: z.string().min(6, t("auth.register.minChars")) })
+  const schema = useMemo(() => z.object({ full_name: z.string().min(2, t("auth.register.minName")), email: z.string().email(t("auth.register.invalidEmail")), password: z.string().min(6, t("auth.register.minChars")) }), [t])
   const nav = useNavigate()
   const { setAuth } = useAuthStore()
   const [err,setErr]=useState("")
-  const { register, handleSubmit, formState: { isSubmitting } } = useForm({ resolver: zodResolver(schema) })
+  const [showPw, setShowPw] = useState(false)
+  const { register, handleSubmit, formState: { isSubmitting, errors } } = useForm({ resolver: zodResolver(schema) })
   const onSubmit = async (v:any) => {
     try {
       await api.post("/auth/register", v)
@@ -27,15 +28,15 @@ export function Register() {
     } catch(e:any){ setErr(apiError(t, e.response?.data?.detail, "auth.register.registerError")) }
   }
   return (
-    <div className="min-h-[100dvh] bg-[#F8FAFC] flex flex-col lg:flex-row">
+    <div className="min-h-[100dvh] bg-[var(--bg)] flex flex-col lg:flex-row">
       {/* Left — Editorial */}
-      <div className="flex-1 relative overflow-hidden flex flex-col justify-between p-8 lg:p-12 xl:p-16 min-h-[50dvh] lg:min-h-[100dvh] bg-gradient-to-br from-violet-600 via-indigo-600 to-violet-700 text-white">
+      <div className="flex-1 relative overflow-hidden flex flex-col justify-between p-8 lg:p-12 xl:p-16 min-h-[50dvh] lg:min-h-[100dvh] bg-gradient-to-br from-[var(--accent)] via-[var(--accent-ink)] to-[var(--accent)] text-[var(--on-accent)]" aria-hidden>
         <div className="absolute inset-0 opacity-20" style={{backgroundImage: `radial-gradient(circle at 30% 20%, white 1px, transparent 1px)`, backgroundSize: `24px 24px`}} />
         <div className="absolute -top-24 -right-24 w-[520px] h-[520px] rounded-full bg-white/10 blur-[80px] pointer-events-none" />
 
         <div className="relative">
           <div className="inline-flex items-center gap-2 rounded-full bg-white/15 border border-white/20 px-3 py-1.5 backdrop-blur">
-            <span className="w-6 h-6 rounded-full bg-white text-violet-600 grid place-items-center"><Leaf size={12} strokeWidth={1.5}/></span>
+            <span className="w-6 h-6 rounded-full bg-white text-[var(--accent)] grid place-items-center"><Leaf size={12} strokeWidth={1.5}/></span>
             <span className="text-[11px] tracking-[0.14em] uppercase font-semibold text-white">{t("auth.register.brandTag")}</span>
           </div>
         </div>
@@ -57,18 +58,18 @@ export function Register() {
 
           <div className="mt-10 hidden lg:block">
             <div className="bg-white/10 border border-white/15 backdrop-blur rounded-[1.5rem] p-3">
-              <div className="bg-white rounded-[1.1rem] p-5 shadow-soft-lg">
+              <div className="bg-[var(--surface)] rounded-[1.1rem] p-5 shadow-soft-lg">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-[#6366F1] text-white grid place-items-center text-xs font-bold">P</div>
+                  <div className="w-9 h-9 rounded-full bg-[var(--accent)] text-[var(--on-accent)] grid place-items-center text-xs font-bold">P</div>
                   <div>
-                    <div className="text-sm font-semibold leading-none text-[#1E293B]">{t("auth.register.orgName")}</div>
-                    <div className="text-xs text-[#94A3B8]">{t("auth.register.orgDesc")}</div>
+                    <div className="text-sm font-semibold leading-none text-[var(--text)]">{t("auth.register.orgName")}</div>
+                    <div className="text-xs text-[var(--text-dim)]">{t("auth.register.orgDesc")}</div>
                   </div>
                   <span className="ml-auto text-[11px] px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">{t("auth.register.activeBadge")}</span>
                 </div>
                 <div className="mt-4 space-y-2">
-                  <div className="h-2 rounded-full bg-[#E2E8F0] overflow-hidden p-0.5"><div className="h-full w-[72%] bg-[#6366F1] rounded-full"/></div>
-                  <div className="flex justify-between text-[11px] text-[#94A3B8] font-mono"><span>{t("auth.register.progress")}</span><span>72%</span></div>
+                  <div className="h-2 rounded-full bg-[var(--bg)] border border-[var(--border)] overflow-hidden p-0.5" role="progressbar" aria-valuenow={72} aria-valuemin={0} aria-valuemax={100}><div className="h-full w-[72%] bg-[var(--accent)] rounded-full"/></div>
+                  <div className="flex justify-between text-[11px] text-[var(--text-dim)] font-mono"><span>{t("auth.register.progress")}</span><span>72%</span></div>
                 </div>
               </div>
             </div>
@@ -81,34 +82,42 @@ export function Register() {
       </div>
 
       {/* Right — Form */}
-      <div className="flex-1 flex items-center justify-center p-6 lg:p-10 bg-[#F8FAFC]">
+      <div className="flex-1 flex items-center justify-center p-6 lg:p-10 bg-[var(--bg)]">
         <div className="w-full max-w-[440px]">
           <div className="bezel-outer">
             <div className="bezel-inner p-8 lg:p-9">
               <div className="flex items-center justify-between">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 grid place-items-center text-white shadow-soft"><span className="font-display font-bold text-lg">P</span></div>
-                <span className="text-[11px] tracking-[0.14em] uppercase font-semibold text-[#94A3B8]">{t("auth.register.createAccount")}</span>
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-ink)] grid place-items-center text-[var(--on-accent)] shadow-soft"><span className="font-display font-bold text-lg">P</span></div>
+                <span className="text-[11px] tracking-[0.14em] uppercase font-semibold text-[var(--text-dim)]">{t("auth.register.createAccount")}</span>
               </div>
 
-              <h2 className="font-display text-[28px] leading-none tracking-tight text-[#1E293B] mt-6">{t("auth.register.createTitle")}</h2>
-              <p className="text-sm text-[#64748B] mt-2">{t("auth.register.createDesc")}</p>
+              <h2 className="font-display text-[28px] leading-none tracking-tight text-[var(--text)] mt-6">{t("auth.register.createTitle")}</h2>
+              <p className="text-sm text-[var(--text-dim)] mt-2">{t("auth.register.createDesc")}</p>
 
-              <form onSubmit={handleSubmit(onSubmit)} className="mt-7 space-y-4">
+              <form onSubmit={handleSubmit(onSubmit)} className="mt-7 space-y-4" noValidate>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium tracking-wide text-[#1E293B]">{t("auth.register.fullName")}</label>
-                  <Input placeholder="Patty Flores" {...register("full_name")} className="h-11 rounded-full bg-[#F8FAFC] border-[#E2E8F0] focus:border-[#6366F1]/30 focus:ring-4 focus:ring-[#6366F1]/10" />
+                  <label htmlFor="reg-name" className="text-xs font-medium tracking-wide text-[var(--text)]">{t("auth.register.fullName")}</label>
+                  <Input id="reg-name" placeholder="Patty Flores" autoComplete="name" {...register("full_name")} aria-invalid={!!errors.full_name} className="h-11 rounded-full" />
+                  {errors.full_name && <p role="alert" className="text-xs text-[var(--danger)]">{String(errors.full_name.message)}</p>}
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium tracking-wide text-[#1E293B]">{t("auth.register.email")}</label>
-                  <Input placeholder="patty@apuntes.pe" {...register("email")} className="h-11 rounded-full bg-[#F8FAFC] border-[#E2E8F0] focus:border-[#6366F1]/30 focus:ring-4 focus:ring-[#6366F1]/10" />
+                  <label htmlFor="reg-email" className="text-xs font-medium tracking-wide text-[var(--text)]">{t("auth.register.email")}</label>
+                  <Input id="reg-email" placeholder="patty@apuntes.pe" autoComplete="email" {...register("email")} aria-invalid={!!errors.email} className="h-11 rounded-full" />
+                  {errors.email && <p role="alert" className="text-xs text-[var(--danger)]">{String(errors.email.message)}</p>}
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium tracking-wide text-[#1E293B]">{t("auth.register.password")}</label>
-                  <Input placeholder="••••••••" type="password" {...register("password")} className="h-11 rounded-full bg-[#F8FAFC] border-[#E2E8F0] focus:border-[#6366F1]/30 focus:ring-4 focus:ring-[#6366F1]/10" />
-                  <p className="text-[11px] text-[#94A3B8]">{t("auth.register.passwordHint")}</p>
+                  <label htmlFor="reg-password" className="text-xs font-medium tracking-wide text-[var(--text)]">{t("auth.register.password")}</label>
+                  <div className="relative">
+                    <Input id="reg-password" placeholder="••••••••" type={showPw ? "text" : "password"} autoComplete="new-password" {...register("password")} aria-invalid={!!errors.password} className="h-11 rounded-full pr-11" />
+                    <button type="button" onClick={() => setShowPw(v => !v)} aria-label={showPw ? "Ocultar contraseña" : "Mostrar contraseña"} aria-pressed={showPw} className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 grid place-items-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)]">
+                      {showPw ? <EyeOff size={16}/> : <Eye size={16}/>}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-[var(--text-dim)]">{t("auth.register.passwordHint")}</p>
+                  {errors.password && <p role="alert" className="text-xs text-[var(--danger)]">{String(errors.password.message)}</p>}
                 </div>
-                {err && <div className="text-sm text-[#EF4444] bg-[#FEF2F2] border border-red-200 p-3 rounded-2xl">{err}</div>}
-                <Button disabled={isSubmitting} className="w-full h-11 rounded-full bg-[#6366F1] hover:bg-[#5458E8] text-white shadow-soft gap-2 group" type="submit">
+                {err && <div role="alert" className="text-sm text-[var(--danger)] bg-[var(--danger)]/10 border border-[var(--danger)]/30 p-3 rounded-2xl">{err}</div>}
+                <Button disabled={isSubmitting} className="w-full h-11 rounded-full shadow-soft gap-2 group" type="submit">
                   {t("auth.register.submit")}
                   <span className="w-7 h-7 rounded-full bg-white/20 grid place-items-center group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform">
                     <ArrowUpRight size={14} strokeWidth={1.5}/>
@@ -117,15 +126,15 @@ export function Register() {
               </form>
 
               <div className="mt-6 flex items-center gap-3">
-                <div className="h-px flex-1 bg-[#E2E8F0]"/>
-                <span className="text-xs text-[#94A3B8]">{t("auth.register.or")}</span>
-                <div className="h-px flex-1 bg-[#E2E8F0]"/>
+                <div className="h-px flex-1 bg-[var(--border)]"/>
+                <span className="text-xs text-[var(--text-dim)]">{t("auth.register.or")}</span>
+                <div className="h-px flex-1 bg-[var(--border)]"/>
               </div>
 
-              <p className="text-sm text-center mt-6 text-[#475569]"><Link to="/login" className="font-semibold text-[#6366F1] hover:text-[#5458E8] underline underline-offset-4">{t("auth.register.haveAccount")}</Link></p>
+              <p className="text-sm text-center mt-6 text-[var(--text-dim)]"><Link to="/login" className="font-semibold text-[var(--accent)] hover:brightness-110 underline underline-offset-4">{t("auth.register.haveAccount")}</Link></p>
             </div>
           </div>
-          <p className="text-center text-xs text-[#94A3B8] mt-4">{t("auth.register.privacyLine")}</p>
+          <p className="text-center text-xs text-[var(--text-dim)] mt-4">{t("auth.register.privacyLine")}</p>
         </div>
       </div>
     </div>

@@ -1,7 +1,16 @@
 {
   "common": {
     "increase": "Increase",
-    "decrease": "Decrease"
+    "decrease": "Decrease",
+    "open": "Open",
+    "retry": "Retry",
+    "close": "Close",
+    "loading": "Loading…",
+    "loadError": "Could not load. Check your connection.",
+    "savedOk": "All changes saved",
+    "saveError": "Could not save",
+    "exportOk": "Download ready",
+    "exportError": "Could not export"
   },
   "nav": {
     "brand": "Patty apuntes",
@@ -30,12 +39,17 @@
     "companies": "Companies",
     "status": "Status",
     "synced": "Synced",
+    "notSynced": "Offline — retry",
     "recentActivity": "Recent activity",
-    "empty": "No files yet. Create your first review in the Editor."
+    "empty": "No files yet. Create your first review in the Editor.",
+    "guideTitle": "How to start",
+    "guideSteps": "1) Create companies · 2) Create a file · 3) Pick a company per row and stamp months",
+    "openFile": "Open",
+    "progressLabel": "Progress {{progress}}%"
   },
   "records": {
     "title": "Files",
-    "subtitle": "Click a row to open it in the editor",
+    "subtitle": "Click the name to open it in the editor",
     "newTitlePlaceholder": "New file title",
     "createAndOpen": "Create & open",
     "searchPlaceholder": "Search files...",
@@ -68,7 +82,12 @@
     "notUpdated": "—",
     "exportFileBase": "review",
     "downloadBase": "file",
-    "delete": "Delete"
+    "delete": "Delete",
+    "openFileAria": "Open {{title}} in the editor",
+    "rowActions": "{{title}} actions",
+    "downloadTitle": "Download “{{title}}”",
+    "deleteTitle": "Delete “{{title}}”?",
+    "deleteDesc": "The file with its rows and months will be deleted."
   },
   "companies": {
     "title": "Companies",
@@ -99,24 +118,26 @@
     "saveToServer": "Save to server",
     "reset": "Reset",
     "saved": "✓ Saved",
+    "saveError": "Could not save to the server",
+    "tableNote": "Density, summary and visible columns live in the Editor Table panel.",
     "language": "Language",
     "spanish": "Español",
     "english": "English"
   },
   "editor": {
     "months": [
-      "J",
-      "F",
-      "M",
-      "A",
-      "M",
-      "J",
-      "J",
-      "A",
-      "S",
-      "O",
-      "N",
-      "D"
+      "JAN",
+      "FEB",
+      "MAR",
+      "APR",
+      "MAY",
+      "JUN",
+      "JUL",
+      "AUG",
+      "SEP",
+      "OCT",
+      "NOV",
+      "DEC"
     ],
     "creating": "Creating...",
     "loading": "Loading...",
@@ -125,6 +146,12 @@
     "savedStatus": "Saved",
     "unsavedStatus": "Unsaved",
     "rowsCount": "{{count}} rows",
+    "draft": {
+      "saveFile": "Save file",
+      "saveHint": "Save this new file to the server",
+      "exportHint": "Save the file before exporting",
+      "titleRequired": "Give the file a title before saving"
+    },
     "toolbar": {
       "label": "Editor toolbar",
       "orientation": "Sheet orientation",
@@ -141,10 +168,10 @@
       "redoWithAction": "Redo: {{action}} (Ctrl+Y)",
       "preview": "Preview",
       "previewHint": "Preview (sheet only)",
-      "validateSave": "Validate and save",
-      "saved": "Saved",
-      "saving": "Saving...",
-      "save": "Save",
+      "validateSave": "Review and close",
+      "saved": "Up to date",
+      "saving": "Reviewing...",
+      "save": "Review and close",
       "export": "Export",
       "downloadPdf": "Download PDF",
       "downloadExcel": "Download Excel",
@@ -170,6 +197,8 @@
       "start": "Start",
       "end": "End",
       "applyScale": "Apply scale",
+      "badScale": "Start cannot be after end",
+      "staffShrunk": "Staff reduced — your active color moved to {{who}}",
       "staffAria": "Staff count",
       "total": "Total",
       "totalMeta": "{{rows}} · {{years}} years",
@@ -231,7 +260,11 @@
       "markedGeneric": "Stamped · click the checkbox to unstamp",
       "markAsWho": "Stamp as {{who}}",
       "addRow": "Add row",
-      "defaultRowName": "Row {{n}}"
+      "defaultRowName": "Row {{n}}",
+      "markRow": "Stamp row",
+      "unmarkRow": "Unstamp row",
+      "markYear": "Stamp {{year}}",
+      "unmarkYear": "Unstamp {{year}}"
     },
     "validation": {
       "missingTitle": "Missing fields to save/export",
@@ -275,7 +308,7 @@
       "statExport": "Export",
       "statExportV": "PDF · Excel",
       "previewCaption": "Preview — Live editor",
-      "previewHint": "Stamp with click · right-click colors",
+      "previewHint": "Stamp with click · pick your color (P1…) in the Table panel",
       "footerTag": "Paper, order and calm — made for Patty",
       "access": "Sign in",
       "welcome": "Welcome back",
