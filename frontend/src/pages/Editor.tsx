@@ -9,7 +9,7 @@ import { useEditorHeaderStore } from "@/stores/editorHeader"
 import { useHistoryStore, type HistorySnapshot } from "@/stores/history"
 import { useUiStore } from "@/stores/ui"
 import { currentYear, newArchivoPayload } from "@/lib/defaults"
-import { Plus, Minus, Trash2, ArrowUp, ArrowDown, Users, Calendar, Check, Save, Download, Eye, Undo2, Redo2, Settings2, FileText, Table2, Palette, RectangleVertical, RectangleHorizontal, PanelRightClose, PanelRightOpen } from "lucide-react"
+import { Plus, Minus, Trash2, ArrowUp, ArrowDown, Users, Calendar, Check, Save, Download, Eye, Undo2, Redo2, Settings2, FileText, Table2, Palette, RectangleVertical, RectangleHorizontal, PanelRightClose, PanelRightOpen, ChevronUp, ChevronDown } from "lucide-react"
 
 const MESES = ["E","F","M","A","M","J","J","A","S","O","N","D"]
 
@@ -79,6 +79,32 @@ function RowMenu({ fila, idx, total, onMove, onDelete }: { fila: any; idx: numbe
         </div>
       )}
     </div>
+  )
+}
+
+// Stepper numérico con flechas del tema (sin spinners nativos).
+function NumberStepper({ value, onChange, min, max, ariaLabel, className, dense }: {
+  value: number; onChange: (v: number) => void; min?: number; max?: number;
+  ariaLabel?: string; className?: string; dense?: boolean
+}) {
+  const clamp = (v: number) => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, v))
+  const btn = "flex-1 flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--accent)] active:text-[var(--accent)] transition rounded focus-visible:outline-[var(--accent)]"
+  return (
+    <span className={`inline-flex items-stretch rounded-lg border border-[var(--border)] bg-[var(--bg)] overflow-hidden ${className ?? ""}`}>
+      <Input
+        type="number"
+        aria-label={ariaLabel}
+        value={value}
+        min={min}
+        max={max}
+        onChange={e=>onChange(clamp(Number(e.target.value)))}
+        className={`themed-number ${dense ? "h-7" : "h-8"} flex-1 min-w-0 bg-transparent border-0 text-[var(--text)] text-xs px-2 focus-visible:ring-0 focus-visible:outline-none`}
+      />
+      <span className="flex flex-col w-6 shrink-0 border-l border-[var(--border)]" role="group" aria-label={ariaLabel}>
+        <button type="button" aria-label="Aumentar" onClick={()=>onChange(clamp(value + 1))} className={btn}><ChevronUp size={12}/></button>
+        <button type="button" aria-label="Disminuir" onClick={()=>onChange(clamp(value - 1))} className={`${btn} border-t border-[var(--border)]`}><ChevronDown size={12}/></button>
+      </span>
+    </span>
   )
 }
 
@@ -694,13 +720,13 @@ export function Editor() {
             <div className="text-[11px] font-semibold text-[var(--text)] tracking-wide flex items-center gap-1.5"><Calendar size={12}/> Datos de tabla</div>
             <div><label className="text-[10px] text-[var(--text-dim)]">Tipo de revisión</label><Input placeholder="Ej. Compras, Ventas…" value={tipoTmp} onChange={e=>setTipoTmp(e.target.value)} onBlur={()=>saveTipo(tipoTmp)} onKeyDown={e=>{ if(e.key==="Enter") (e.target as HTMLInputElement).blur() }} className="h-8 mt-1 bg-[var(--bg)] border-[var(--border)] text-[var(--text)] text-xs placeholder:text-[var(--text-dim)]" /></div>
             <div className="flex gap-2">
-              <div className="flex-1"><label className="text-[10px] text-[var(--text-dim)]">Inicio</label><Input type="number" value={scaleStart} onChange={e=>setScaleStart(Number(e.target.value))} className="h-8 mt-1 bg-[var(--bg)] border-[var(--border)] text-[var(--text)] text-xs" /></div>
-              <div className="flex-1"><label className="text-[10px] text-[var(--text-dim)]">Fin</label><Input type="number" value={scaleEnd} onChange={e=>setScaleEnd(Number(e.target.value))} className="h-8 mt-1 bg-[var(--bg)] border-[var(--border)] text-[var(--text)] text-xs" /></div>
+              <div className="flex-1"><label className="text-[10px] text-[var(--text-dim)]">Inicio</label><NumberStepper ariaLabel="Año de inicio" value={scaleStart} onChange={setScaleStart} className="mt-1 w-full" /></div>
+              <div className="flex-1"><label className="text-[10px] text-[var(--text-dim)]">Fin</label><NumberStepper ariaLabel="Año de fin" value={scaleEnd} onChange={setScaleEnd} className="mt-1 w-full" /></div>
             </div>
             <Button onClick={()=>applyScale.mutate()} disabled={applyScale.isPending || scaleStart>scaleEnd} className="w-full h-7 bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] text-xs rounded-full">Aplicar escala</Button>
             <div className="flex items-center gap-2 pt-1">
               <Users size={12} className="text-[var(--text-dim)] shrink-0" />
-              <Input type="number" aria-label="Cantidad de personal" min={1} max={10} value={archivo.personal_count ?? 2} onChange={e=>{ const n = Math.max(1, Math.min(10, Number(e.target.value)||1)); updatePersonal.mutate(n)}} className="w-16 h-7 bg-[var(--bg)] border-[var(--border)] text-[var(--text)] text-xs" />
+              <NumberStepper dense ariaLabel="Cantidad de personal" min={1} max={10} value={archivo.personal_count ?? 2} onChange={(n)=>{ updatePersonal.mutate(n)}} className="w-[104px]" />
               <span className="text-xs text-[var(--text-dim)] truncate">{personalOpts.join(", ")}</span>
             </div>
             <div className="flex justify-between text-xs"><span className="text-[var(--text-dim)]">Total</span><span className="text-[var(--text)] font-medium">{filas.length} · {years.length} años</span></div>

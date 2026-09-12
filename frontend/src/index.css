@@ -102,3 +102,19 @@ body {
 .table-compact td:not(.p-0), .table-compact th:not(.p-0) { padding: 4px 8px; }
 .table-normal td:not(.p-0), .table-normal th:not(.p-0) { padding: 8px 12px; }
 .table-comfortable td:not(.p-0), .table-comfortable th:not(.p-0) { padding: 12px 16px; }
+
+/* Controles nativos (spinners de number, etc.) siguen el tema */
+input[type="number"] {
+  accent-color: var(--accent);
+}
+
+/* Steppers propios: ocultar spinners nativos (solo UI del tema) */
+input.themed-number::-webkit-outer-spin-button,
+input.themed-number::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input.themed-number {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
