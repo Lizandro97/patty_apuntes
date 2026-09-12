@@ -70,8 +70,9 @@ export function Archivos() {
           </select>
         </div>
         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead><tr className="bg-[var(--bg)] border-b border-[var(--border)] text-left"><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase">N.º</th><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase">Archivo</th><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase" aria-sort={sort==="progreso" ? "descending" : "none"}>Progreso</th><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase" aria-sort={sort==="fecha" ? "descending" : "none"}>Actualizado</th><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase text-right">Acciones</th></tr></thead>
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[600px] text-sm">
+            <thead><tr className="bg-[var(--bg)] border-b border-[var(--border)] text-left"><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase">N.º</th><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase">Archivo</th><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase" aria-sort={sort==="progreso" ? "descending" : "none"}>Progreso</th><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase" aria-sort={sort==="fecha" ? "descending" : "none"}>Actualizado</th><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase text-center">Acciones</th></tr></thead>
             <tbody className="divide-y divide-[var(--border)]">
               {list.map((a:any, i:number)=> (
                 <tr key={a.id} onClick={()=>nav(`/editor/${a.id}`)} title="Abrir en el editor" className="cursor-pointer hover:bg-[var(--surface-2)] transition">
@@ -97,11 +98,11 @@ export function Archivos() {
                     </span>
                   </td>
                   <td className="p-3 text-xs text-[var(--text-dim)] whitespace-nowrap">{a.updated_at ? new Date(a.updated_at).toLocaleDateString() : "—"}</td>
-                  <td className="p-3" onClick={e=>e.stopPropagation()}>
-                    <span className="flex gap-1.5 justify-end items-center">
+                  <td className="p-3 text-center whitespace-nowrap" onClick={e=>e.stopPropagation()}>
+                    <span className="inline-flex gap-1.5 justify-center items-center">
                       {edit?.id===a.id ? null : (<Button variant="outline" onClick={()=>setEdit({id:a.id,titulo:a.titulo})} className="h-7 bg-[var(--bg)] border-[var(--border)] text-[var(--text-dim)] hover:text-[var(--text)] text-xs rounded-lg">Renombrar</Button>)}
                       <span className="relative" data-dlmenu>
-                        <Button variant="ghost" title="Descargar" aria-label={`Descargar ${a.titulo}`} aria-haspopup="menu" aria-expanded={dlId===a.id} onClick={()=>setDlId(dlId===a.id?null:a.id)} className="h-7 w-7 text-[var(--text-dim)] hover:text-[var(--text)]"><Download size={14}/></Button>
+                        <Button variant="ghost" title="Descargar" aria-label={`Descargar ${a.titulo}`} aria-haspopup="menu" aria-expanded={dlId===a.id} onClick={()=>setDlId(dlId===a.id?null:a.id)} className="h-7 w-7 p-0 shrink-0 text-[var(--text-dim)] hover:text-[var(--text)]"><Download size={14}/></Button>
                         {dlId===a.id && (
                           <span role="menu" className="absolute right-0 top-full mt-1 w-[150px] bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-xl p-1.5 z-30 block">
                             <button role="menuitem" onClick={()=>{ setDlId(null); download(a.id,"pdf") }} className="w-full text-left px-3 py-2 rounded-lg text-xs text-[var(--text)] hover:bg-[var(--surface-2)]">Descargar PDF</button>
@@ -111,11 +112,11 @@ export function Archivos() {
                       </span>
                       {confirmId===a.id ? (
                         <span className="flex gap-1.5">
-                          <Button onClick={()=>{ del.mutate(a.id); setConfirmId(null) }} className="h-7 bg-red-500 hover:bg-red-600 text-white rounded-lg px-3 text-xs">Confirmar</Button>
+                          <Button onClick={()=>{ del.mutate(a.id); setConfirmId(null) }} className="h-7 bg-[var(--danger)] hover:brightness-110 text-[var(--on-accent)] rounded-lg px-3 text-xs">Confirmar</Button>
                           <Button variant="ghost" onClick={()=>setConfirmId(null)} className="h-7 text-[var(--text-dim)] text-xs">Cancelar</Button>
                         </span>
                       ) : (
-                        <Button variant="ghost" title="Eliminar archivo" aria-label={`Eliminar ${a.titulo}`} className="h-7 w-7 text-[var(--text-dim)] hover:text-red-400" onClick={()=>setConfirmId(a.id)}><Trash2 size={14}/></Button>
+                        <Button variant="ghost" title="Eliminar archivo" aria-label={`Eliminar ${a.titulo}`} className="h-7 w-7 p-0 shrink-0 text-[var(--text-dim)] hover:text-[var(--danger)]" onClick={()=>setConfirmId(a.id)}><Trash2 size={14}/></Button>
                       )}
                     </span>
                   </td>
@@ -123,6 +124,7 @@ export function Archivos() {
               ))}
             </tbody>
           </table>
+          </div>
           {list.length===0 && <div className="text-center py-12 text-sm text-[var(--text-dim)] border-t border-[var(--border)] space-y-3"><div>{q ? "Sin resultados para esta búsqueda" : "Sin archivos"}</div>{!q && (data as any[])?.length===0 && <Button onClick={()=>inputRef.current?.focus()} className="bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] rounded-lg h-9"><Plus size={16}/> Crear archivo</Button>}</div>}
         </div>
       </div>

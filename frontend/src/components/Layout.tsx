@@ -110,7 +110,7 @@ function ProfileFooter({ collapsed }: { collapsed: boolean }) {
             <button
               role="menuitem"
               onClick={() => { logout(); nav("/login") }}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] text-red-400 hover:bg-red-500/10 transition"
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] text-[var(--danger)] hover:bg-[var(--danger)]/10 transition"
             >
               <LogOut size={15} /> Cerrar sesión
             </button>
@@ -148,7 +148,7 @@ function Sidebar() {
             aria-label={collapsed ? "Expandir menú" : "Patty apuntes"}
             className={cn("group/logo flex items-center gap-2.5 rounded-xl transition", collapsed && "lg:cursor-pointer")}
           >
-            <span className="w-8 h-8 shrink-0 rounded-lg bg-gradient-to-br from-[#38bdf8] to-[#6366f1] flex items-center justify-center text-white relative overflow-hidden">
+            <span className="w-8 h-8 shrink-0 rounded-lg bg-gradient-to-br from-[var(--accent)] to-[var(--accent-ink)] flex items-center justify-center text-[var(--on-accent)] relative overflow-hidden">
               <Leaf size={16} strokeWidth={2} className={cn("absolute inset-0 m-auto transition-opacity duration-150", collapsed && "lg:group-hover/logo:opacity-0")} />
               {collapsed && <PanelLeftOpen size={16} className="absolute inset-0 m-auto opacity-0 lg:group-hover/logo:opacity-100 transition-opacity duration-150" />}
             </span>
@@ -208,7 +208,7 @@ function MobileBar() {
         <Menu size={18} />
       </button>
       <span className="flex items-center gap-2">
-        <span className="w-6 h-6 rounded-lg bg-gradient-to-br from-[#38bdf8] to-[#6366f1] flex items-center justify-center text-white"><Leaf size={13} strokeWidth={2}/></span>
+        <span className="w-6 h-6 rounded-lg bg-gradient-to-br from-[var(--accent)] to-[var(--accent-ink)] flex items-center justify-center text-[var(--on-accent)]"><Leaf size={13} strokeWidth={2}/></span>
         <span className="font-semibold text-[var(--text)] text-[14px] tracking-tight">Patty apuntes</span>
       </span>
     </header>

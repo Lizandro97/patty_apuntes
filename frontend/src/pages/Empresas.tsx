@@ -24,21 +24,25 @@ export function Empresas() {
           <Button onClick={()=>create.mutate()} disabled={!nombre.trim()} className="bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] rounded-lg h-10 px-5"><Plus size={16}/> Agregar</Button>
         </div>
         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead><tr className="bg-[var(--bg)] border-b border-[var(--border)] text-left"><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase">N.º</th><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase">Empresa</th><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase">Creada</th><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase text-right">Acciones</th></tr></thead>
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[520px] text-sm">
+            <thead><tr className="bg-[var(--bg)] border-b border-[var(--border)] text-left"><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase">N.º</th><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase">Empresa</th><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase">Creada</th><th className="p-3 text-xs font-medium text-[var(--text-dim)] uppercase text-center">Acciones</th></tr></thead>
             <tbody className="divide-y divide-[var(--border)]">
               {data?.map((e:any, i:number)=> (
                 <tr key={e.id} className="hover:bg-[var(--surface-2)]">
                   <td className="p-3 text-[var(--text-dim)] font-mono text-xs">{i+1}</td>
                   <td className="p-3 text-[var(--text)]">{edit?.id===e.id ? <Input aria-label="Editar nombre de empresa" value={edit.nombre} onChange={ev=>setEdit({...edit,nombre:ev.target.value})} className="h-8 bg-[var(--bg)] border-[var(--border)] text-[var(--text)]" /> : e.nombre}</td>
                   <td className="p-3 text-xs text-[var(--text-dim)]">{new Date(e.created_at).toLocaleDateString()}</td>
-                  <td className="p-3 flex gap-1.5 justify-end">
-                    {edit?.id===e.id ? (<><Button onClick={()=>update.mutate()} className="h-7 bg-[var(--accent)] text-[var(--on-accent)] rounded-lg px-3 text-xs">Guardar</Button><Button variant="ghost" onClick={()=>setEdit(null)} className="h-7 text-[var(--text-dim)]">Cancelar</Button></>) : confirmId===e.id ? (<><Button onClick={()=>{ del.mutate(e.id); setConfirmId(null) }} className="h-7 bg-red-500 hover:bg-red-600 text-white rounded-lg px-3 text-xs">Confirmar</Button><Button variant="ghost" onClick={()=>setConfirmId(null)} className="h-7 text-[var(--text-dim)]">Cancelar</Button></>) : (<><Button variant="outline" onClick={()=>setEdit(e)} className="h-7 bg-[var(--bg)] border-[var(--border)] text-[var(--text-dim)] hover:text-[var(--text)] text-xs rounded-lg">Editar</Button><Button variant="ghost" title="Eliminar empresa" aria-label={`Eliminar ${e.nombre}`} onClick={()=>setConfirmId(e.id)} className="h-7 text-[var(--text-dim)] hover:text-red-400"><Trash2 size={14}/></Button></>)}
+                  <td className="p-3 text-center whitespace-nowrap">
+                    <span className="inline-flex gap-1.5 justify-center items-center">
+                    {edit?.id===e.id ? (<><Button onClick={()=>update.mutate()} className="h-7 bg-[var(--accent)] text-[var(--on-accent)] rounded-lg px-3 text-xs">Guardar</Button><Button variant="ghost" onClick={()=>setEdit(null)} className="h-7 text-[var(--text-dim)]">Cancelar</Button></>) : confirmId===e.id ? (<><Button onClick={()=>{ del.mutate(e.id); setConfirmId(null) }} className="h-7 bg-[var(--danger)] hover:brightness-110 text-[var(--on-accent)] rounded-lg px-3 text-xs">Confirmar</Button><Button variant="ghost" onClick={()=>setConfirmId(null)} className="h-7 text-[var(--text-dim)]">Cancelar</Button></>) : (<><Button variant="outline" onClick={()=>setEdit(e)} className="h-7 bg-[var(--bg)] border-[var(--border)] text-[var(--text-dim)] hover:text-[var(--text)] text-xs rounded-lg">Editar</Button><Button variant="ghost" title="Eliminar empresa" aria-label={`Eliminar ${e.nombre}`} onClick={()=>setConfirmId(e.id)} className="h-7 w-7 p-0 shrink-0 text-[var(--text-dim)] hover:text-[var(--danger)]"><Trash2 size={14}/></Button></>)}
+                    </span>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
           {data?.length===0 && <div className="p-8 text-center text-sm text-[var(--text-dim)] border-t border-[var(--border)]">Sin empresas aún</div>}
         </div>
       </div>

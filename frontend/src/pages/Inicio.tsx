@@ -33,7 +33,7 @@ export function Inicio() {
           </div>
           <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
             <div className="text-[11px] text-[var(--text-dim)] uppercase tracking-wide">Estado</div>
-            <div className="text-sm mt-1 text-[var(--success)] flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"/> Sincronizado</div>
+            <div className="text-sm mt-1 text-[var(--success)] flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[var(--success)] animate-pulse"/> Sincronizado</div>
           </div>
         </div>
 

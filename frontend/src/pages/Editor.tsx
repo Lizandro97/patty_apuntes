@@ -34,7 +34,7 @@ function EmpresaPicker({ fila, empresas, onSelect, onClose }: { fila: any; empre
       </div>
       {fila.empresa_id && (
         <div className="border-t border-[var(--sheet-border)] mt-2 pt-2">
-          <button onClick={()=>onSelect({ empresa_id: "" })} className="w-full text-left px-3 py-2 rounded-lg hover:bg-red-50 text-xs text-[var(--text-dim)] hover:text-red-600">Quitar empresa de esta fila</button>
+          <button onClick={()=>onSelect({ empresa_id: "" })} className="w-full text-left px-3 py-2 rounded-lg hover:bg-[var(--danger)]/10 text-xs text-[var(--text-dim)] hover:text-[var(--danger)]">Quitar empresa de esta fila</button>
         </div>
       )}
     </div>
@@ -70,7 +70,7 @@ function RowMenu({ fila, idx, total, onMove, onDelete }: { fila: any; idx: numbe
               <button onClick={() => { onMove(-1); setOpen(false) }} disabled={idx === 0} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-[#1e293b] hover:bg-[var(--sheet-soft)] disabled:opacity-40 disabled:hover:bg-transparent"><ArrowUp size={13}/> Subir fila</button>
               <button onClick={() => { onMove(1); setOpen(false) }} disabled={idx === total - 1} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-[#1e293b] hover:bg-[var(--sheet-soft)] disabled:opacity-40 disabled:hover:bg-transparent"><ArrowDown size={13}/> Bajar fila</button>
               <div className="border-t border-[var(--sheet-border)] mt-1 pt-1">
-                <button onClick={() => setConfirming(true)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-red-600 hover:bg-red-50"><Trash2 size={13}/> Eliminar fila</button>
+                <button onClick={() => setConfirming(true)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-[var(--danger)] hover:bg-[var(--danger)]/10"><Trash2 size={13}/> Eliminar fila</button>
               </div>
             </>
           ) : (
@@ -79,7 +79,7 @@ function RowMenu({ fila, idx, total, onMove, onDelete }: { fila: any; idx: numbe
               <div className="text-[11px] text-[var(--text-dim)] px-1.5 pb-2.5">Se borrarán sus meses anotados.</div>
               <div className="flex gap-1.5">
                 <button onClick={() => setConfirming(false)} className="flex-1 h-7 rounded-lg border border-[var(--sheet-border)] text-xs text-[#64748b] hover:bg-[var(--sheet-soft)]">Cancelar</button>
-                <button onClick={() => { onDelete(); setOpen(false); setConfirming(false) }} className="flex-1 h-7 rounded-lg bg-red-500 hover:bg-red-600 text-xs text-white font-medium">Eliminar</button>
+                <button onClick={() => { onDelete(); setOpen(false); setConfirming(false) }} className="flex-1 h-7 rounded-lg bg-[var(--danger)] hover:brightness-110 text-xs text-[var(--on-accent)] font-medium">Eliminar</button>
               </div>
             </div>
           )}
@@ -619,7 +619,7 @@ export function Editor() {
                 className="flex-1 min-w-0 bg-transparent px-1 py-[3px] text-[14px] font-medium text-[var(--text)] text-left truncate focus:outline-none placeholder:text-[var(--text-dim)] placeholder:font-normal cursor-text"
               />
               <span className="hidden lg:flex items-center gap-1.5 text-[12px] text-[var(--text-dim)] shrink-0">
-                <span className={`w-2 h-2 rounded-full inline-block ${hdr.dirty ? "bg-amber-500" : "bg-emerald-500"}`} />
+                <span className={`w-2 h-2 rounded-full inline-block ${hdr.dirty ? "bg-[var(--warning)]" : "bg-[var(--success)]"}`} />
                 {hdr.dirty ? "Sin guardar" : "Guardado"} · {hdr.filas} filas
               </span>
             </span>
@@ -733,8 +733,8 @@ export function Editor() {
               </div>
               {cfg.show_summary && stats && (
                 <div className="flex items-center gap-4 mb-4 px-3 py-2 rounded-lg bg-[var(--sheet-soft)] border border-[var(--sheet-border)] text-[11px]">
-                  <span className="flex items-center gap-1.5 text-[var(--success)]"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"/>Revisadas <b>{stats.revisadas}/{stats.total || filas.length}</b></span>
-                  <span className="flex items-center gap-1.5 text-[var(--warning)]"><span className="w-1.5 h-1.5 rounded-full bg-orange-400"/>Pendientes <b>{stats.pendientes}</b></span>
+                  <span className="flex items-center gap-1.5 text-[var(--success)]"><span className="w-1.5 h-1.5 rounded-full bg-[var(--success)]"/>Revisadas <b>{stats.revisadas}/{stats.total || filas.length}</b></span>
+                  <span className="flex items-center gap-1.5 text-[var(--warning)]"><span className="w-1.5 h-1.5 rounded-full bg-[var(--warning)]"/>Pendientes <b>{stats.pendientes}</b></span>
                   <span className="flex items-center gap-2 text-[var(--sheet-ink)] ml-auto"><span>Progreso <b>{stats.progreso}%</b></span><span className="w-24 h-1.5 bg-[var(--surface)] border border-[var(--sheet-border)] rounded-full overflow-hidden inline-block"><span className="block h-full bg-[var(--sheet-accent)]" style={{width:`${stats.progreso}%`}}/></span></span>
                 </div>
               )}
@@ -972,9 +972,9 @@ export function Editor() {
       {/* Alert: required fields missing for save/export */}
       {validAlert && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" onClick={()=>setValidAlert(null)}>
-          <div className="w-[400px] max-w-full bg-white rounded-2xl shadow-2xl p-5 text-[#1e293b]" onClick={e=>e.stopPropagation()}>
+          <div className="w-[400px] max-w-full bg-[var(--surface)] rounded-2xl shadow-2xl p-5 text-[var(--text)]" onClick={e=>e.stopPropagation()}>
             <div className="text-sm font-semibold mb-1">Faltan campos para guardar/exportar</div>
-            <p className="text-xs text-[#64748b] mb-3">Cada fila necesita una empresa registrada. Puedes seguir editando los meses libremente.</p>
+            <p className="text-xs text-[var(--text-dim)] mb-3">Cada fila necesita una empresa registrada. Puedes seguir editando los meses libremente.</p>
             <ul className="max-h-[220px] overflow-auto space-y-1.5 mb-4">
               {validAlert.map((m:any)=>(
                 <li key={m.id} className="text-xs px-3 py-2 rounded-lg bg-[var(--sheet-soft)] border border-[var(--sheet-border)]">
