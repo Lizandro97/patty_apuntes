@@ -88,6 +88,57 @@ function FilaTextCell({ fila, field, onSave }: { fila: any; field: "responsable"
   return <input aria-label={field === "responsable" ? "Responsable" : "Observaciones"} value={v} onChange={e=>setV(e.target.value)} onBlur={()=>{ if(v!== (fila?.[field] ?? "")) onSave(v)}} onKeyDown={e=>{ if(e.key==="Enter") (e.target as HTMLInputElement).blur() }} placeholder="—" className="w-full min-w-0 max-w-full h-7 px-2 text-xs border border-transparent hover:border-[var(--sheet-border)] focus:border-[var(--sheet-accent)] rounded focus:outline-none bg-transparent text-[#1e293b]" />
 }
 
+// Handle arrastrable estilo Excel sobre las líneas del grid.
+// axis x = borde derecho (ancho de columna), axis y = borde inferior (alto de fila).
+// Avisa hover y drag para pintar la guía full-length (una misma columna/fila).
+function DragHandle({ axis, title, zoom, startV, min, onV, onReset, onHover, onDrag }: {
+  axis: "x" | "y"; title: string; zoom: number; startV: number; min: number;
+  onV: (v: number) => void; onReset: () => void;
+  onHover?: (active: boolean) => void; onDrag?: (active: boolean) => void
+}) {
+  const st = useRef<{ p: number; v: number } | null>(null)
+  const [on, setOn] = useState(false)
+  const end = (notify = true) => {
+    const was = st.current !== null
+    st.current = null
+    setOn(false)
+    if (was && notify) onDrag?.(false)
+  }
+  const pos = axis === "x"
+    ? "top-0 bottom-0 -right-[4px] w-[9px] cursor-col-resize"
+    : "left-0 right-0 -bottom-[4px] h-[9px] cursor-row-resize"
+  const line = axis === "x"
+    ? "absolute inset-y-0 left-1/2 -ml-px w-[2px]"
+    : "absolute inset-x-0 top-1/2 -mt-px h-[2px]"
+  return (
+    <span
+      title={title}
+      onMouseEnter={() => onHover?.(true)}
+      onMouseLeave={() => onHover?.(false)}
+      onDoubleClick={(e) => { e.stopPropagation(); onReset() }}
+      onPointerDown={(e) => {
+        (e.target as HTMLElement).setPointerCapture(e.pointerId)
+        st.current = { p: axis === "x" ? e.clientX : e.clientY, v: startV }
+        setOn(true)
+        onDrag?.(true)
+        e.preventDefault()
+        e.stopPropagation()
+      }}
+      onPointerMove={(e) => {
+        const s = st.current
+        if (!s) return
+        const d = ((axis === "x" ? e.clientX : e.clientY) - s.p) / (zoom || 1)
+        onV(Math.max(min, Math.round(s.v + d)))
+      }}
+      onPointerUp={(e) => { end(); try { (e.target as HTMLElement).releasePointerCapture(e.pointerId) } catch { /* noop */ } }}
+      onPointerCancel={() => end()}
+      className={`absolute ${pos} z-10 group/handle`}
+    >
+      <span className={`${line} ${on ? "bg-[var(--accent)]" : "bg-transparent group-hover/handle:bg-[var(--accent)]"} transition-colors`} />
+    </span>
+  )
+}
+
 export function Editor() {
   const { id } = useParams()
   const qc = useQueryClient()
@@ -111,7 +162,7 @@ export function Editor() {
   const stepZoom = (dir: 1 | -1) => {
     const i = ZOOM_STEPS.reduce((best, v, idx) => (Math.abs(v - zoom) < Math.abs(ZOOM_STEPS[best] - zoom) ? idx : best), 0)
     const next = Math.min(ZOOM_STEPS.length - 1, Math.max(0, i + dir))
-    setZoom(ZOOM_STEPS[next])
+    changeZoom(ZOOM_STEPS[next])
   }
   const sheetBase = orientation === "horizontal" ? { w: 1273, h: 900 } : { w: 900, h: 1273 }
   const rightOpen = useUiStore((s) => s.rightOpen)
@@ -123,6 +174,81 @@ export function Editor() {
   const { data: celdas } = useQuery({ queryKey: ["celdas", archivoId], enabled: !!archivoId, queryFn: async () => (await api.get(`/archivos/${archivoId}/celdas`)).data })
   const { data: stats } = useQuery({ queryKey: ["stats", archivoId], enabled: !!archivoId, queryFn: async () => (await api.get(`/archivos/${archivoId}/stats`)).data })
   const { data: empresas } = useQuery({ queryKey: ["empresas"], queryFn: async () => (await api.get("/empresas")).data })
+  const { data: diseno } = useQuery({ queryKey: ["diseno", archivoId], enabled: !!archivoId, queryFn: async () => (await api.get(`/archivos/${archivoId}/diseno`)).data })
+  const disenoPayload = (sec: "hoja" | "tabla"): any =>
+    ((diseno as any[]) ?? []).find((d: any) => d.seccion === sec)?.payload ?? {}
+  const colW: Record<string, number> = disenoPayload("tabla").cols ?? {}
+  const rowH: Record<string, number> = disenoPayload("tabla").rows ?? {}
+  const disenoTimers = useRef<{ hoja?: any; tabla?: any }>({})
+  useEffect(() => () => { clearTimeout(disenoTimers.current.hoja); clearTimeout(disenoTimers.current.tabla) }, [archivoId])
+  const schedulePutDiseno = (seccion: "hoja" | "tabla") => {
+    clearTimeout(disenoTimers.current[seccion])
+    disenoTimers.current[seccion] = setTimeout(async () => {
+      try {
+        const cur = ((qc.getQueryData(["diseno", archivoId]) as any[]) ?? []).find((d: any) => d.seccion === seccion)
+        await api.put(`/archivos/${archivoId}/diseno`, { seccion, payload: cur?.payload ?? {} })
+      } catch { /* best-effort: queda en caché y se reintenta en el próximo cambio */ }
+    }, 500)
+  }
+  const patchDiseno = (seccion: "hoja" | "tabla", fn: (p: any) => any) => {
+    const cur = ((qc.getQueryData(["diseno", archivoId]) as any[]) ?? []).slice()
+    const i = cur.findIndex((d: any) => d.seccion === seccion)
+    if (i >= 0) cur[i] = { ...cur[i], payload: fn(cur[i].payload ?? {}) }
+    else cur.push({ seccion, payload: fn({}), updated_at: new Date().toISOString() })
+    qc.setQueryData(["diseno", archivoId], cur)
+    schedulePutDiseno(seccion)
+  }
+  const changeOrientation = (o: "vertical" | "horizontal") => {
+    setOrientation(o)
+    setZoom(1)
+    patchDiseno("hoja", (p) => ({ ...p, orientation: o, zoom: 1 }))
+  }
+  const changeZoom = (z: number) => {
+    setZoom(z)
+    patchDiseno("hoja", (p) => ({ ...p, orientation, zoom: z }))
+  }
+  const disenoInit = useRef<string | null>(null)
+  useEffect(() => {
+    if (!diseno || !archivoId || disenoInit.current === archivoId) return
+    disenoInit.current = archivoId
+    const h = disenoPayload("hoja")
+    if (h.orientation === "vertical" || h.orientation === "horizontal") setOrientation(h.orientation)
+    if (typeof h.zoom === "number" && h.zoom >= 0.5 && h.zoom <= 1.5) setZoom(h.zoom)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diseno, archivoId])
+  const mKey = (y: number, mi: number) => `m:${y}:${mi + 1}`
+  const colStyle = (key: string) =>
+    (colW[key] ? { width: colW[key], minWidth: colW[key] } : undefined) as any
+  const monthCls = (key: string) =>
+    `${colW[key] ? "flex-none" : "flex-1"} text-center relative`
+  const monthStyle = (key: string) => (colW[key] ? { width: colW[key] } : undefined) as any
+  const resizeCol = (key: string, w: number) =>
+    patchDiseno("tabla", (p) => ({ ...p, cols: { ...(p.cols ?? {}), [key]: w } }))
+  const resetCol = (key: string) =>
+    patchDiseno("tabla", (p) => { const cols = { ...(p.cols ?? {}) }; delete cols[key]; return { ...p, cols } })
+  const resizeRow = (fid: string, h: number) =>
+    patchDiseno("tabla", (p) => ({ ...p, rows: { ...(p.rows ?? {}), [fid]: h } }))
+  const resetRow = (fid: string) =>
+    patchDiseno("tabla", (p) => { const rows = { ...(p.rows ?? {}) }; delete rows[fid]; return { ...p, rows } })
+  // Guía full-length (una misma columna/fila) en hover o drag, color éxito del tema
+  const [hoverGuide, setHoverGuide] = useState<{ axis: "x" | "y"; key: string } | null>(null)
+  const [dragGuide, setDragGuide] = useState<{ axis: "x" | "y"; key: string } | null>(null)
+  const activeGuide = dragGuide ?? hoverGuide
+  const guideProps = (axis: "x" | "y", key: string) => ({
+    onHover: (a: boolean) => setHoverGuide(a ? { axis, key } : (g) => (g && g.axis === axis && g.key === key ? null : g)),
+    onDrag: (a: boolean) => setDragGuide(a ? { axis, key } : (g) => (g && g.axis === axis && g.key === key ? null : g)),
+  })
+  const GUIDE = "var(--accent)"
+  // Guía 2px pareja con sombra interna (no mueve el layout): cada celda pinta su
+  // segmento y se ve una línea continua de header a última fila / última columna.
+  const guideShadowX = (key: string) =>
+    (guideCol(key) ? { boxShadow: `inset -2px 0 0 ${GUIDE}` } : null) as any
+  const guideShadowY = (fid: string) =>
+    (guideRow(fid) ? { boxShadow: `inset 0 -2px 0 ${GUIDE}` } : null) as any
+  const guideCol = (key: string) => activeGuide?.axis === "x" && activeGuide.key === key
+  const guideRow = (fid: string) => activeGuide?.axis === "y" && activeGuide.key === fid
+  const HEADER_KEY = "header"
+  const headerH: number | undefined = rowH[HEADER_KEY]
   useEffect(() => { if (archivo) { setScaleStart(archivo.periodo_inicio); setScaleEnd(archivo.periodo_fin); setTipoTmp(archivo.tipo_revision ?? "") } }, [archivo])
   const createArchivo = useMutation({ mutationFn: async () => (await api.post("/archivos", newArchivoPayload())).data, onSuccess: (d) => setArchivoId(d.id) })
   useEffect(() => { if (!id && !archivoId) createArchivo.mutate() }, [])
@@ -288,7 +414,7 @@ export function Editor() {
   })
   const addFila = useMutation({ mutationFn: async (p:any) => (await api.post(`/archivos/${archivoId}/filas`, p)).data, onMutate: () => { pushHistory("Agregar fila"); hdr.setDirty(true) }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["filas", archivoId] }); qc.invalidateQueries({ queryKey: ["celdas", archivoId] }) } })
   const updateFila = useMutation({ mutationFn: async ({ fid, patch }: { fid: string; patch: any }) => (await api.put(`/archivos/${archivoId}/filas/${fid}`, patch)).data, onMutate: (v: any) => { pushHistory(v?.patch?.empresa_id !== undefined ? "Cambiar empresa" : "Editar fila"); hdr.setDirty(true) }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["filas", archivoId] }); qc.invalidateQueries({ queryKey: ["celdas", archivoId] }) } })
-  const deleteFila = useMutation({ mutationFn: async (fid: string) => await api.delete(`/archivos/${archivoId}/filas/${fid}`), onMutate: () => { pushHistory("Eliminar fila"); hdr.setDirty(true) }, onSuccess: () => qc.invalidateQueries({ queryKey: ["filas", archivoId] }) })
+  const deleteFila = useMutation({ mutationFn: async (fid: string) => await api.delete(`/archivos/${archivoId}/filas/${fid}`), onMutate: () => { pushHistory("Eliminar fila"); hdr.setDirty(true) }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["filas", archivoId] }); qc.invalidateQueries({ queryKey: ["diseno", archivoId] }) } })
   const applyScale = useMutation({ mutationFn: async () => (await api.put(`/archivos/${archivoId}`, { periodo_inicio: Number(scaleStart), periodo_fin: Number(scaleEnd) })).data, onMutate: () => { pushHistory("Cambiar escala de años"); hdr.setDirty(true) }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["archivo", archivoId] }); qc.invalidateQueries({ queryKey: ["filas", archivoId] }); qc.invalidateQueries({ queryKey: ["celdas", archivoId] }); qc.invalidateQueries({ queryKey: ["stats", archivoId] }) } })
   const updatePersonal = useMutation({ mutationFn: async (n:number) => (await api.put(`/archivos/${archivoId}`, { personal_count: n })).data, onMutate: ()=>{ pushHistory("Cambiar personal"); hdr.setDirty(true) }, onSuccess: ()=>qc.invalidateQueries({queryKey:["archivo",archivoId]}) })
   const saveTipo = (v:string) => { const t = v.trim(); if (t !== (archivo?.tipo_revision ?? "")) { pushHistory("Cambiar tipo de revisión"); hdr.setDirty(true); api.put(`/archivos/${archivoId}`,{tipo_revision:t}).then(()=>qc.invalidateQueries({queryKey:["archivo",archivoId]})) } }
@@ -343,6 +469,11 @@ export function Editor() {
   const map=new Map<string,any>(); celdas?.forEach((c:any)=>map.set(`${c.fila_id}-${c.anio}-${c.mes}`,c))
   const headBg = cfg.table_header_bg && cfg.table_header_bg !== "#e0e7ff" ? cfg.table_header_bg : ""
   const years=Array.from({length: archivo.periodo_fin - archivo.periodo_inicio + 1}, (_,i)=>archivo.periodo_inicio+i)
+  const monthSum = years.reduce((s: number, y: number) => s + MESES.reduce((a: number, _, mi: number) => a + (colW[mKey(y, mi)] ?? 20), 0), 0)
+  const fixedSum = (colW.n ?? 44) + (colW.empresa ?? 160) + 54
+    + (cfg.visible_fields.responsable ? (colW.responsable ?? 90) : 0)
+    + (cfg.visible_fields.observaciones ? (colW.observaciones ?? 140) : 0)
+  const tableMinWidth = fixedSum + monthSum
   const personalOpts=Array.from({length: archivo.personal_count||2},(_,i)=>`P${i+1}`)
   const move=(idx:number,dir:-1|1)=>{
     const o=[...orderedFilas]; const t=idx+dir; if(t<0||t>=o.length) return
@@ -365,10 +496,10 @@ export function Editor() {
             <span className="text-[var(--text)] whitespace-nowrap">Página 1</span>
             <span aria-hidden className="w-px h-5 bg-[var(--border)] mx-1 shrink-0" />
             <div className="flex items-center gap-0.5" role="group" aria-label="Orientación de hoja">
-              <button onClick={()=>{ setOrientation("vertical"); setZoom(defaultZoom("vertical")) }} title="Vertical" aria-pressed={orientation==="vertical"} className={`w-7 h-7 flex items-center justify-center rounded-full transition ${orientation==="vertical" ? "bg-[var(--surface-2)] text-[var(--text)] border border-[var(--accent-border)]" : "text-[var(--text-dim)] hover:text-[var(--text)] border border-transparent"}`}>
+              <button onClick={()=>changeOrientation("vertical")} title="Vertical" aria-pressed={orientation==="vertical"} className={`w-7 h-7 flex items-center justify-center rounded-full transition ${orientation==="vertical" ? "bg-[var(--surface-2)] text-[var(--text)] border border-[var(--accent-border)]" : "text-[var(--text-dim)] hover:text-[var(--text)] border border-transparent"}`}>
                 <RectangleVertical size={13}/>
               </button>
-              <button onClick={()=>{ setOrientation("horizontal"); setZoom(defaultZoom("horizontal")) }} title="Horizontal" aria-pressed={orientation==="horizontal"} className={`w-7 h-7 flex items-center justify-center rounded-full transition ${orientation==="horizontal" ? "bg-[var(--surface-2)] text-[var(--text)] border border-[var(--accent-border)]" : "text-[var(--text-dim)] hover:text-[var(--text)] border border-transparent"}`}>
+              <button onClick={()=>changeOrientation("horizontal")} title="Horizontal" aria-pressed={orientation==="horizontal"} className={`w-7 h-7 flex items-center justify-center rounded-full transition ${orientation==="horizontal" ? "bg-[var(--surface-2)] text-[var(--text)] border border-[var(--accent-border)]" : "text-[var(--text-dim)] hover:text-[var(--text)] border border-transparent"}`}>
                 <RectangleHorizontal size={13}/>
               </button>
             </div>
@@ -377,7 +508,7 @@ export function Editor() {
               <button onClick={()=>stepZoom(-1)} title="Reducir zoom" aria-label="Reducir zoom" className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition">
                 <Minus size={13}/>
               </button>
-              <button onClick={()=>setZoom(defaultZoom(orientation))} title="Restablecer zoom" className="px-1.5 text-[11px] font-mono text-[var(--text)] hover:text-[var(--text)] min-w-[42px] text-center">
+              <button onClick={()=>changeZoom(defaultZoom(orientation))} title="Restablecer zoom" className="px-1.5 text-[11px] font-mono text-[var(--text)] hover:text-[var(--text)] min-w-[42px] text-center">
                 {Math.round(zoom * 100)}%
               </button>
               <button onClick={()=>stepZoom(1)} title="Ampliar zoom" aria-label="Ampliar zoom" className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition">
@@ -430,18 +561,23 @@ export function Editor() {
                 </div>
               )}
               <div className={`overflow-auto ${preview ? "pointer-events-none select-none" : ""}`}>
-                <table className={`w-full text-xs border-collapse border border-[var(--sheet-border)] table-${cfg.table_density}`} style={{ minWidth: 488 + years.length * 12 * 20 }} aria-readonly={preview || undefined}>
+                <table className={`w-full text-xs border-collapse border border-[var(--sheet-border)] table-${cfg.table_density}`} style={{ minWidth: tableMinWidth }} aria-readonly={preview || undefined}>
                   <thead>
                     <tr className="bg-[var(--sheet-soft)] border-y border-[var(--sheet-border)]" style={headBg ? { background: headBg } : undefined}>
-                      <th rowSpan={2} className="p-2 w-[44px] text-left text-[var(--sheet-ink)] font-semibold align-middle border-x border-[var(--sheet-border)]">N.</th>
-                      <th rowSpan={2} className="p-2 text-center text-[var(--sheet-ink)] font-semibold min-w-[160px] align-middle border-x border-[var(--sheet-border)]">Empresa</th>
+                      <th rowSpan={2} style={{ ...colStyle("n"), ...guideShadowX("n"), ...guideShadowY(HEADER_KEY) }} className="p-2 w-[44px] text-left text-[var(--sheet-ink)] font-semibold align-middle border-x border-[var(--sheet-border)] relative">N.{!preview && <DragHandle axis="x" title="Ancho de columna (doble clic: auto)" zoom={zoom} startV={colW.n ?? 44} min={28} onV={(w)=>resizeCol("n", w)} onReset={()=>resetCol("n")} {...guideProps("x", "n")} />}{!preview && <DragHandle axis="y" title="Altura del encabezado (doble clic: auto)" zoom={zoom} startV={headerH ?? 44} min={40} onV={(h)=>resizeRow(HEADER_KEY, h)} onReset={()=>resetRow(HEADER_KEY)} {...guideProps("y", HEADER_KEY)} />}</th>
+                      <th rowSpan={2} style={{ ...colStyle("empresa"), ...guideShadowX("empresa"), ...guideShadowY(HEADER_KEY) }} className="p-2 text-center text-[var(--sheet-ink)] font-semibold min-w-[160px] align-middle border-x border-[var(--sheet-border)] relative">Empresa{!preview && <DragHandle axis="x" title="Ancho de columna (doble clic: auto)" zoom={zoom} startV={colW.empresa ?? 160} min={60} onV={(w)=>resizeCol("empresa", w)} onReset={()=>resetCol("empresa")} {...guideProps("x", "empresa")} />}{!preview && <DragHandle axis="y" title="Altura del encabezado (doble clic: auto)" zoom={zoom} startV={headerH ?? 44} min={40} onV={(h)=>resizeRow(HEADER_KEY, h)} onReset={()=>resetRow(HEADER_KEY)} {...guideProps("y", HEADER_KEY)} />}</th>
                       <th colSpan={years.length * 12} className="p-2 text-center text-[var(--sheet-ink)] font-semibold text-[12px] border-x border-[var(--sheet-border)]">Año / Meses</th>
-                      {cfg.visible_fields.responsable && <th rowSpan={2} className="p-2 text-center text-[var(--sheet-ink)] font-semibold align-middle min-w-[90px] border-x border-[var(--sheet-border)]">Responsable</th>}
-                      {cfg.visible_fields.observaciones && <th rowSpan={2} className="p-2 text-center text-[var(--sheet-ink)] font-semibold align-middle min-w-[140px] border-x border-[var(--sheet-border)]">Observaciones</th>}
+                      {cfg.visible_fields.responsable && <th rowSpan={2} style={{ ...colStyle("responsable"), ...guideShadowX("responsable"), ...guideShadowY(HEADER_KEY) }} className="p-2 text-center text-[var(--sheet-ink)] font-semibold align-middle min-w-[90px] border-x border-[var(--sheet-border)] relative">Responsable{!preview && <DragHandle axis="x" title="Ancho de columna (doble clic: auto)" zoom={zoom} startV={colW.responsable ?? 90} min={60} onV={(w)=>resizeCol("responsable", w)} onReset={()=>resetCol("responsable")} {...guideProps("x", "responsable")} />}{!preview && <DragHandle axis="y" title="Altura del encabezado (doble clic: auto)" zoom={zoom} startV={headerH ?? 44} min={40} onV={(h)=>resizeRow(HEADER_KEY, h)} onReset={()=>resetRow(HEADER_KEY)} {...guideProps("y", HEADER_KEY)} />}</th>}
+                      {cfg.visible_fields.observaciones && <th rowSpan={2} style={{ ...colStyle("observaciones"), ...guideShadowX("observaciones"), ...guideShadowY(HEADER_KEY) }} className="p-2 text-center text-[var(--sheet-ink)] font-semibold align-middle min-w-[140px] border-x border-[var(--sheet-border)] relative">Observaciones{!preview && <DragHandle axis="x" title="Ancho de columna (doble clic: auto)" zoom={zoom} startV={colW.observaciones ?? 140} min={60} onV={(w)=>resizeCol("observaciones", w)} onReset={()=>resetCol("observaciones")} {...guideProps("x", "observaciones")} />}{!preview && <DragHandle axis="y" title="Altura del encabezado (doble clic: auto)" zoom={zoom} startV={headerH ?? 44} min={40} onV={(h)=>resizeRow(HEADER_KEY, h)} onReset={()=>resetRow(HEADER_KEY)} {...guideProps("y", HEADER_KEY)} />}</th>}
                     </tr>
-                    <tr className="bg-[var(--sheet-soft)] border-b border-[var(--sheet-border)]" style={headBg ? { background: headBg } : undefined}>
+                    <tr style={{ ...(headBg ? { background: headBg } : null), ...(headerH ? { height: headerH } : null) }} className="bg-[var(--sheet-soft)] border-b border-[var(--sheet-border)]">
                       {years.map(y=>(
-                        <th key={y} colSpan={12} className="p-0 text-center text-[var(--sheet-ink)] font-semibold text-[11px] border-x border-[var(--sheet-border)]"><div className="pt-1 pb-0.5 border-b border-[var(--sheet-border)]">{y}</div><div className="flex divide-x divide-[var(--sheet-border)] py-1 text-[9px] font-normal text-[var(--sheet-ink)]">{MESES.map((m, mi)=> <span key={`${y}-${mi}-${m}`} className="flex-1 text-center">{m}</span>)}</div></th>
+                        <th key={y} colSpan={12} style={guideShadowY(HEADER_KEY) ?? undefined} className="p-0 text-center text-[var(--sheet-ink)] font-semibold text-[11px] border-x border-[var(--sheet-border)] relative"><div className="pt-1 pb-0.5 border-b border-[var(--sheet-border)]">{y}</div><div className="flex items-stretch text-[9px] font-normal text-[var(--sheet-ink)]">{MESES.map((m, mi)=> {
+                          const mk = mKey(y, mi)
+                          return <span key={`${y}-${mi}-${m}`} style={{ ...monthStyle(mk), ...guideShadowX(mk), ...(guideRow(HEADER_KEY) ? { borderLeftColor: GUIDE } : null) }} className={`${monthCls(mk)} flex items-center justify-center ${mi === 0 ? "border-l-0" : "border-l border-[var(--sheet-border)]"}`}>{m}{!preview && <DragHandle axis="x" title="Ancho del mes (doble clic: auto)" zoom={zoom} startV={colW[mk] ?? 20} min={16} onV={(w)=>resizeCol(mk, w)} onReset={()=>resetCol(mk)} {...guideProps("x", mk)} />}</span>
+                        })}</div>
+                          {!preview && <DragHandle axis="y" title="Altura del encabezado (doble clic: auto)" zoom={zoom} startV={headerH ?? 44} min={40} onV={(h)=>resizeRow(HEADER_KEY, h)} onReset={()=>resetRow(HEADER_KEY)} {...guideProps("y", HEADER_KEY)} />}
+                        </th>
                       ))}
                     </tr>
                   </thead>
@@ -450,12 +586,13 @@ export function Editor() {
                       <tr><td colSpan={2 + years.length*12 + (cfg.visible_fields.responsable?1:0) + (cfg.visible_fields.observaciones?1:0)} className="p-12 text-center text-[var(--text-dim)]"><div className="text-sm">Tu papel está en blanco</div></td></tr>
                     ) : (
                       filas.slice().sort((a:any,b:any)=>a.orden-b.orden).map((fila:any, idx:number)=>(
-                        <tr key={fila.id} className="border-t border-[var(--sheet-border)] hover:bg-[var(--sheet-soft)]">
-                          <td className="p-2 text-center text-[var(--text-dim)] text-xs relative group border-x border-[var(--sheet-border)]">
+                        <tr key={fila.id} style={rowH[fila.id] ? { height: rowH[fila.id] } : undefined} className="border-t border-b border-[var(--sheet-border)] hover:bg-[var(--sheet-soft)]">
+                          <td className="p-2 text-center text-[var(--text-dim)] text-xs relative group border-x border-[var(--sheet-border)]" style={{ ...colStyle("n"), ...guideShadowX("n"), ...guideShadowY(fila.id) }}>
                             {idx+1}
                             {!preview && <RowMenu fila={fila} idx={idx} total={orderedFilas.length} onMove={(dir)=>move(idx,dir)} onDelete={()=>deleteFila.mutate(fila.id)} />}
+                            {!preview && <DragHandle axis="y" title="Alto de fila (doble clic: auto)" zoom={zoom} startV={rowH[fila.id] ?? 33} min={28} onV={(h)=>resizeRow(fila.id, h)} onReset={()=>resetRow(fila.id)} {...guideProps("y", fila.id)} />}
                           </td>
-                          <td className="p-2 relative text-center border-x border-[var(--sheet-border)]">
+                          <td className="p-2 relative text-center border-x border-[var(--sheet-border)]" style={{ ...colStyle("empresa"), ...guideShadowX("empresa"), ...guideShadowY(fila.id) }}>
                             <button disabled={preview} onClick={()=>setPickFilaId(pickFilaId===fila.id?null:fila.id)} title={fila.nombre_snapshot ? "Cambiar empresa" : "Elegir empresa"} className={`rounded px-2 h-7 w-full text-xs flex items-center gap-1 border border-transparent hover:border-[var(--sheet-border)] hover:bg-[var(--sheet-soft)] disabled:hover:border-transparent disabled:hover:bg-transparent disabled:cursor-default ${fila.nombre_snapshot ? "font-medium text-[#1e293b]" : ""}`}>
                               <span className="flex-1 text-left truncate">{fila.nombre_snapshot || " "}</span>
                               <span className={`text-[10px] ml-auto ${fila.nombre_snapshot ? "text-[var(--text-dim)]" : "text-[var(--text-dim)]"}`}>▾</span>
@@ -463,12 +600,14 @@ export function Editor() {
                             {pickFilaId===fila.id && empresas && <EmpresaPicker fila={fila} empresas={empresas} onClose={()=>setPickFilaId(null)} onSelect={async(v)=>{ await updateFila.mutateAsync({ fid: fila.id, patch: v as any }); setPickFilaId(null) }} />}
                           </td>
                           {years.map(y=>(
-                            <td key={y} colSpan={12} className="p-0 border-x border-[var(--sheet-border)]">
-                              <div className="flex divide-x divide-[var(--sheet-border)]">
+                            <td key={y} colSpan={12} className="p-0 border-x border-[var(--sheet-border)]" style={guideShadowY(fila.id) ?? undefined}>
+                              <div className="flex items-stretch h-full">
                                 {MESES.map((_, mi)=>{
                                   const c = map.get(`${fila.id}-${y}-${mi+1}`)
-                                  if(!c) return <span key={mi} className="flex-1 grid place-items-center py-2" title="Cargando..."><input type="checkbox" disabled aria-label="Cargando mes" className="w-4 h-4 accent-[var(--sheet-accent)] opacity-60" /></span>
-                                  return <label key={mi} className="flex-1 grid place-items-center py-2 cursor-pointer hover:bg-[var(--sheet-soft)]" title={c.revisado ? "Desmarcar" : "Marcar"}>
+                                  const mk = mKey(y, mi)
+                                  const accentL = guideRow(fila.id) ? { borderLeftColor: GUIDE } : null
+                                  if(!c) return <span key={mi} style={{ ...monthStyle(mk), ...accentL, ...guideShadowY(fila.id) }} className={`${monthCls(mk)} grid place-items-center py-2 ${mi === 0 ? "border-l-0" : "border-l border-[var(--sheet-border)]"}`} title="Cargando..."><input type="checkbox" disabled aria-label="Cargando mes" className="w-4 h-4 accent-[var(--sheet-accent)] opacity-60" /></span>
+                                  return <label key={mi} style={{ ...monthStyle(mk), ...accentL, ...guideShadowY(fila.id) }} className={`${monthCls(mk)} grid place-items-center py-2 h-full ${mi === 0 ? "border-l-0" : "border-l border-[var(--sheet-border)]"} cursor-pointer hover:bg-[var(--sheet-soft)]`} title={c.revisado ? "Desmarcar" : "Marcar"}>
                                     <input type="checkbox" aria-label={`Mes ${mi + 1} de ${y}`} checked={!!c.revisado} onChange={()=>toggle.mutate(c)} className="w-4 h-4 accent-[var(--sheet-accent)] cursor-pointer" />
                                   </label>
                                 })}
@@ -476,12 +615,12 @@ export function Editor() {
                             </td>
                           ))}
                           {cfg.visible_fields.responsable && (
-                            <td className="p-0 min-w-[90px] border-x border-[var(--sheet-border)]">
+                            <td className="p-0 min-w-[90px] border-x border-[var(--sheet-border)]" style={{ ...colStyle("responsable"), ...guideShadowX("responsable"), ...guideShadowY(fila.id) }}>
                               <FilaTextCell field="responsable" fila={fila} onSave={v=>updateFila.mutate({ fid: fila.id, patch:{ responsable: v } })} />
                             </td>
                           )}
                           {cfg.visible_fields.observaciones && (
-                            <td className="p-0 min-w-[140px] border-x border-[var(--sheet-border)]">
+                            <td className="p-0 min-w-[140px] border-x border-[var(--sheet-border)]" style={{ ...colStyle("observaciones"), ...guideShadowX("observaciones"), ...guideShadowY(fila.id) }}>
                               <FilaTextCell field="observacion" fila={fila} onSave={v=>updateFila.mutate({ fid: fila.id, patch:{ observacion: v } })} />
                             </td>
                           )}

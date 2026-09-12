@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.archivo import Archivo
+from app.models.archivo_diseno import ArchivoDiseno
 from app.models.archivo_fila import ArchivoFila
 from app.models.celda import Celda
 from app.models.empresa import Empresa
@@ -22,6 +23,8 @@ from app.schemas.archivo import (
     CeldaBulkUpdate,
     CeldaOut,
     CeldaUpdate,
+    DisenoOut,
+    DisenoUpdate,
 )
 
 router = APIRouter(prefix="/archivos", tags=["archivos"])
@@ -231,6 +234,53 @@ def update(
     return a
 
 
+SECCIONES_DISENO = ("hoja", "tabla")
+
+
+def _check_archivo(aid: str, db: Session, user: User) -> Archivo:
+    a = db.query(Archivo).filter(Archivo.id == aid, Archivo.user_id == user.id).first()
+    if not a:
+        raise HTTPException(404, "No encontrado")
+    return a
+
+
+@router.get("/{aid}/diseno", response_model=list[DisenoOut])
+def get_diseno(aid: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    _check_archivo(aid, db, user)
+    return (
+        db.query(ArchivoDiseno)
+        .filter(ArchivoDiseno.archivo_id == aid, ArchivoDiseno.seccion.in_(SECCIONES_DISENO))
+        .all()
+    )
+
+
+@router.put("/{aid}/diseno", response_model=DisenoOut)
+def put_diseno(
+    aid: str,
+    data: DisenoUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    _check_archivo(aid, db, user)
+    if data.seccion not in SECCIONES_DISENO:
+        raise HTTPException(400, "seccion debe ser 'hoja' o 'tabla'")
+    if not isinstance(data.payload, dict) or len(data.payload) > 500:
+        raise HTTPException(400, "payload inválido")
+    row = (
+        db.query(ArchivoDiseno)
+        .filter(ArchivoDiseno.archivo_id == aid, ArchivoDiseno.seccion == data.seccion)
+        .first()
+    )
+    if not row:
+        row = ArchivoDiseno(archivo_id=aid, seccion=data.seccion, payload=data.payload)
+        db.add(row)
+    else:
+        row.payload = data.payload
+    db.commit()
+    db.refresh(row)
+    return row
+
+
 @router.delete("/{aid}")
 def delete(aid: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     a = db.query(Archivo).filter(Archivo.id == aid, Archivo.user_id == user.id).first()
@@ -302,6 +352,21 @@ def duplicate(aid: str, db: Session = Depends(get_db), user: User = Depends(get_
             )
     db.commit()
     _recalc_progreso(db, a.id)
+    # copiar el diseño visual (hoja + tabla; los altos por fila se reasignan por orden,
+    # las claves que no son filas —ej. "header"— se preservan verbatim)
+    for d in db.query(ArchivoDiseno).filter(ArchivoDiseno.archivo_id == orig.id).all():
+        payload = d.payload if isinstance(d.payload, dict) else {}
+        if d.seccion == "tabla" and isinstance(payload.get("rows"), dict):
+            new_by_orden = {f.orden: f.id for f in new_filas}
+            old_ids = {f.id for f in filas}
+            rows = {k: v for k, v in payload["rows"].items() if k not in old_ids}
+            for f in filas:
+                v = payload["rows"].get(f.id)
+                if v is not None and f.orden in new_by_orden:
+                    rows[new_by_orden[f.orden]] = v
+            payload = {**payload, "rows": rows}
+        db.add(ArchivoDiseno(archivo_id=a.id, seccion=d.seccion, payload=payload))
+    db.commit()
     db.refresh(a)
     return a
 
@@ -434,6 +499,19 @@ def delete_fila(
     for idx, f in enumerate(filas):
         f.orden = idx
     db.commit()
+    # podar el alto guardado de la fila eliminada
+    dis = (
+        db.query(ArchivoDiseno)
+        .filter(ArchivoDiseno.archivo_id == aid, ArchivoDiseno.seccion == "tabla")
+        .first()
+    )
+    if dis and isinstance(dis.payload, dict) and fid in (dis.payload.get("rows") or {}):
+        payload = dict(dis.payload)
+        rows = dict(payload.get("rows") or {})
+        rows.pop(fid, None)
+        payload["rows"] = rows
+        dis.payload = payload
+        db.commit()
     return {"ok": True}
 
 

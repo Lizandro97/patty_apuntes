@@ -93,6 +93,20 @@ class CeldaBulkUpdate(BaseModel):
     revisado: bool | None = None
 
 
+class DisenoOut(BaseModel):
+    seccion: str
+    payload: dict
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class DisenoUpdate(BaseModel):
+    seccion: str
+    payload: dict
+
+
 class ConfigUpdate(BaseModel):
     primary_color: str | None = None
     font_family: str | None = None
