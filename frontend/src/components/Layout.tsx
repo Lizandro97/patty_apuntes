@@ -4,13 +4,14 @@ import { useAuthStore } from "@/stores/auth"
 import { useUiStore } from "@/stores/ui"
 import { THEMES, useThemeStore } from "@/stores/theme"
 import { useEffect, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 
 const items = [
-  { to: "/", key: "inicio", label: "Inicio", icon: Home },
-  { to: "/editor", key: "editor", label: "Editor", icon: FileText },
-  { to: "/empresas", key: "empresas", label: "Empresas", icon: Building2 },
-  { to: "/archivos", key: "archivos", label: "Archivos", icon: Files },
+  { to: "/", key: "home", labelKey: "nav.home", icon: Home },
+  { to: "/editor", key: "editor", labelKey: "nav.editor", icon: FileText },
+  { to: "/companies", key: "companies", labelKey: "nav.companies", icon: Building2 },
+  { to: "/records", key: "records", labelKey: "nav.records", icon: Files },
 ] as const
 
 function shortName(fullName: string | undefined, email: string | undefined) {
@@ -20,6 +21,7 @@ function shortName(fullName: string | undefined, email: string | undefined) {
 }
 
 function ProfileFooter({ collapsed }: { collapsed: boolean }) {
+  const { t } = useTranslation()
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
   const nav = useNavigate()
@@ -42,7 +44,7 @@ function ProfileFooter({ collapsed }: { collapsed: boolean }) {
       <button
         onClick={() => setOpen(!open)}
         title={name}
-        aria-label="Menú de cuenta"
+        aria-label={t("nav.accountMenu")}
         aria-haspopup="menu"
         aria-expanded={open}
         className={cn(
@@ -80,27 +82,27 @@ function ProfileFooter({ collapsed }: { collapsed: boolean }) {
           <div className="border-t border-[var(--border)] mt-1 pt-1">
             <button
               role="menuitem"
-              onClick={() => { setOpen(false); nav("/configuracion") }}
+                onClick={() => { setOpen(false); nav("/settings") }}
               className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] text-[var(--text)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] transition"
             >
-              <Settings size={15} /> Ajustes
+              <Settings size={15} /> {t("nav.settings")}
             </button>
-            <div role="group" aria-label="Tema" className="px-3 py-2">
+            <div role="group" aria-label={t("nav.theme")} className="px-3 py-2">
               <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-dim)] mb-1.5 px-2" aria-hidden>
-                <Sun size={12} /> Tema
+                <Sun size={12} /> {t("nav.theme")}
               </div>
               <div className="space-y-1">
-                {THEMES.map((t) => (
+                {THEMES.map((th) => (
                   <button
-                    key={t.id}
+                    key={th.id}
                     role="menuitemradio"
-                    aria-checked={theme === t.id}
-                    onClick={() => setTheme(t.id)}
+                    aria-checked={theme === th.id}
+                    onClick={() => setTheme(th.id)}
                     className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-[13px] text-[var(--text)] hover:bg-[var(--surface-2)] transition"
                   >
-                    <span className="w-4 h-4 rounded-full border border-black/10" style={{ background: t.dot }} />
-                    {t.label}
-                    <span className="ml-auto text-[var(--accent)] text-xs">{theme === t.id ? "✓" : ""}</span>
+                    <span className="w-4 h-4 rounded-full border border-black/10" style={{ background: th.dot }} />
+                    {t(`nav.themes.${th.id}`)}
+                    <span className="ml-auto text-[var(--accent)] text-xs">{theme === th.id ? "✓" : ""}</span>
                   </button>
                 ))}
               </div>
@@ -112,7 +114,7 @@ function ProfileFooter({ collapsed }: { collapsed: boolean }) {
               onClick={() => { logout(); nav("/login") }}
               className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] text-[var(--danger)] hover:bg-[var(--danger)]/10 transition"
             >
-              <LogOut size={15} /> Cerrar sesión
+              <LogOut size={15} /> {t("nav.logout")}
             </button>
           </div>
         </div>
@@ -122,12 +124,13 @@ function ProfileFooter({ collapsed }: { collapsed: boolean }) {
 }
 
 function Sidebar() {
+  const { t } = useTranslation()
   const loc = useLocation()
   const collapsed = useUiStore((s) => s.collapsed)
   const toggleCollapsed = useUiStore((s) => s.toggleCollapsed)
   const mobileOpen = useUiStore((s) => s.mobileOpen)
   const setMobileOpen = useUiStore((s) => s.setMobileOpen)
-  const activeKey = loc.pathname === "/" ? "inicio" : loc.pathname.startsWith("/editor") ? "editor" : loc.pathname.startsWith("/empresas") ? "empresas" : loc.pathname.startsWith("/archivos") ? "archivos" : "config"
+  const activeKey = loc.pathname === "/" ? "home" : loc.pathname.startsWith("/editor") ? "editor" : loc.pathname.startsWith("/companies") ? "companies" : loc.pathname.startsWith("/records") ? "records" : "settings"
   return (
     <>
       {mobileOpen && (
@@ -144,21 +147,21 @@ function Sidebar() {
         <div className={cn("flex items-center gap-2.5 px-4 h-[60px] shrink-0", collapsed && "lg:justify-center lg:px-0")}>
           <button
             onClick={() => { if (collapsed && window.matchMedia("(min-width: 1024px)").matches) toggleCollapsed() }}
-            title={collapsed ? "Expandir menú" : undefined}
-            aria-label={collapsed ? "Expandir menú" : "Patty apuntes"}
+            title={collapsed ? t("nav.expandMenu") : undefined}
+            aria-label={collapsed ? t("nav.expandMenu") : t("nav.brand")}
             className={cn("group/logo flex items-center gap-2.5 rounded-xl transition", collapsed && "lg:cursor-pointer")}
           >
             <span className="w-8 h-8 shrink-0 rounded-lg bg-gradient-to-br from-[var(--accent)] to-[var(--accent-ink)] flex items-center justify-center text-[var(--on-accent)] relative overflow-hidden">
               <Leaf size={16} strokeWidth={2} className={cn("absolute inset-0 m-auto transition-opacity duration-150", collapsed && "lg:group-hover/logo:opacity-0")} />
               {collapsed && <PanelLeftOpen size={16} className="absolute inset-0 m-auto opacity-0 lg:group-hover/logo:opacity-100 transition-opacity duration-150" />}
             </span>
-            <span className={cn("font-semibold text-[var(--text)] text-[15px] tracking-tight truncate", collapsed && "lg:hidden")}>Patty apuntes</span>
+            <span className={cn("font-semibold text-[var(--text)] text-[15px] tracking-tight truncate", collapsed && "lg:hidden")}>{t("nav.brand")}</span>
           </button>
           {!collapsed && (
             <button
               onClick={toggleCollapsed}
-              title="Comprimir menú"
-              aria-label="Comprimir menú"
+              title={t("nav.collapseMenu")}
+              aria-label={t("nav.collapseMenu")}
               className="ml-auto w-7 h-7 hidden lg:flex items-center justify-center rounded-lg text-[var(--text-dim)] hover:bg-[var(--surface)] hover:text-[var(--text)] transition"
             >
               <PanelLeftClose size={15} />
@@ -173,7 +176,7 @@ function Sidebar() {
               <NavLink
                 key={it.key}
                 to={it.to}
-                title={it.label}
+                title={t(it.labelKey)}
                 onClick={() => setMobileOpen(false)}
                 className={cn(
                   "flex items-center gap-3 rounded-xl text-[13px] leading-none transition border",
@@ -182,7 +185,7 @@ function Sidebar() {
                 )}
               >
                 <Icon className={cn("w-[18px] h-[18px] shrink-0", isActive && "stroke-[var(--accent)]")} strokeWidth={isActive ? 2 : 1.7} />
-                <span className={cn("truncate", collapsed && "lg:hidden")}>{it.label}</span>
+                <span className={cn("truncate", collapsed && "lg:hidden")}>{t(it.labelKey)}</span>
               </NavLink>
             )
           })}
@@ -196,20 +199,21 @@ function Sidebar() {
 }
 
 function MobileBar() {
+  const { t } = useTranslation()
   const setMobileOpen = useUiStore((s) => s.setMobileOpen)
   return (
     <header className="lg:hidden h-[52px] flex items-center gap-2 px-3 bg-[var(--bg)] border-b border-[var(--border)] shrink-0 no-print">
       <button
         onClick={() => setMobileOpen(true)}
-        title="Abrir menú"
-        aria-label="Abrir menú"
+        title={t("nav.openMenu")}
+        aria-label={t("nav.openMenu")}
         className="w-9 h-9 flex items-center justify-center rounded-lg text-[var(--text-dim)] hover:bg-[var(--surface)] hover:text-[var(--text)] transition"
       >
         <Menu size={18} />
       </button>
       <span className="flex items-center gap-2">
         <span className="w-6 h-6 rounded-lg bg-gradient-to-br from-[var(--accent)] to-[var(--accent-ink)] flex items-center justify-center text-[var(--on-accent)]"><Leaf size={13} strokeWidth={2}/></span>
-        <span className="font-semibold text-[var(--text)] text-[14px] tracking-tight">Patty apuntes</span>
+        <span className="font-semibold text-[var(--text)] text-[14px] tracking-tight">{t("nav.brand")}</span>
       </span>
     </header>
   )

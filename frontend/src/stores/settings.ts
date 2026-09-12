@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 
-export type AppConfig = {
+export type AppSettings = {
   primary_color: string
   font_family: string
   font_size_px: number
@@ -14,16 +14,16 @@ export type AppConfig = {
   pastel_mode: boolean
   layout_mode: "sidebar" | "fullscreen"
   visible_fields: {
-    nombres: boolean
-    responsable: boolean
-    fecha: boolean
-    observaciones: boolean
+    names: boolean
+    assignee: boolean
+    date: boolean
+    notes: boolean
   }
 }
 
-const LEGACY_AUTO = ["#6366f1", "#EC4899", "#ec4899"]
+const LEGACY_AUTO = new Set(["#6366f1", "#EC4899", "#ec4899"])
 
-const defaults: AppConfig = {
+const defaults: AppSettings = {
   primary_color: "",
   font_family: "Inter",
   font_size_px: 14,
@@ -35,17 +35,17 @@ const defaults: AppConfig = {
   rounded_borders: true,
   pastel_mode: true,
   layout_mode: "sidebar",
-  visible_fields: { nombres: true, responsable: true, fecha: true, observaciones: true },
+  visible_fields: { names: true, assignee: true, date: true, notes: true },
 }
 
-type Store = AppConfig & {
-  set: (p: Partial<AppConfig>) => void
-  setField: (k: keyof AppConfig, v: any) => void
+type Store = AppSettings & {
+  set: (p: Partial<AppSettings>) => void
+  setField: (k: keyof AppSettings, v: any) => void
   reset: () => void
   applyCss: () => void
 }
 
-export const useConfigStore = create<Store>()(
+export const useSettingsStore = create<Store>()(
   persist(
     (set, get) => ({
       ...defaults,
@@ -56,7 +56,7 @@ export const useConfigStore = create<Store>()(
         const s = get()
         const r = document.documentElement
         r.style.setProperty("--primary", s.primary_color || "var(--accent)")
-        const auto = !s.primary_color || LEGACY_AUTO.includes(s.primary_color)
+        const auto = !s.primary_color || LEGACY_AUTO.has(s.primary_color)
         r.style.setProperty("--sheet-accent", auto ? "var(--accent)" : s.primary_color)
         r.style.setProperty("--font-family", s.font_family)
         r.style.setProperty("--font-size", s.font_size_px + "px")
@@ -67,6 +67,17 @@ export const useConfigStore = create<Store>()(
         else r.classList.remove("pastel")
       },
     }),
-    { name: "patty-config", onRehydrateStorage: () => (state) => state?.applyCss() }
+    { name: "patty-config", version: 2, migrate: (persisted: any) => {
+        const vf = persisted?.visible_fields
+        if (vf && typeof vf === "object") {
+          persisted.visible_fields = {
+            names: vf.names ?? true,
+            assignee: vf.assignee ?? vf.responsable ?? true,
+            date: vf.date ?? vf.fecha ?? true,
+            notes: vf.notes ?? vf.observaciones ?? true,
+          }
+        }
+        return persisted
+      }, onRehydrateStorage: () => (state) => state?.applyCss() }
   )
 )

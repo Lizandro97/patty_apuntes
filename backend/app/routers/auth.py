@@ -13,7 +13,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/register", response_model=UserOut)
 def register(data: RegisterIn, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == data.email).first():
-        raise HTTPException(400, "Email ya registrado")
+        raise HTTPException(400, {"code": "EMAIL_TAKEN", "message": "Email already registered"})
     u = User(
         email=data.email, hashed_password=hash_password(data.password), full_name=data.full_name
     )
@@ -27,7 +27,7 @@ def register(data: RegisterIn, db: Session = Depends(get_db)):
 def login(data: LoginIn, db: Session = Depends(get_db)):
     u = db.query(User).filter(User.email == data.email).first()
     if not u or not verify_password(data.password, u.hashed_password):
-        raise HTTPException(401, "Credenciales inválidas")
+        raise HTTPException(401, {"code": "INVALID_CREDENTIALS", "message": "Invalid credentials"})
     token = create_access_token({"sub": u.id})
     return {"access_token": token}
 

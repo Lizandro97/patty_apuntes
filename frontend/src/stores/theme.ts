@@ -2,10 +2,10 @@ import { create } from "zustand"
 
 export type ThemeName = "papel" | "tinta" | "menta"
 
-export const THEMES: { id: ThemeName; label: string; dot: string }[] = [
-  { id: "papel", label: "Papel timbrado", dot: "#2B3FE0" },
-  { id: "tinta", label: "Tinta nocturna", dot: "#C9A227" },
-  { id: "menta", label: "Menta clínica", dot: "#0E7C5B" },
+export const THEMES: { id: ThemeName; dot: string }[] = [
+  { id: "papel", dot: "#2B3FE0" },
+  { id: "tinta", dot: "#C9A227" },
+  { id: "menta", dot: "#0E7C5B" },
 ]
 
 type ThemeState = {

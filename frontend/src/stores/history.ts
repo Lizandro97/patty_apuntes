@@ -2,9 +2,9 @@ import { create } from "zustand"
 
 export type HistorySnapshot = {
   label: string
-  filas: any[] | undefined
-  celdas: any[] | undefined
-  archivo: any | undefined
+  rows: any[] | undefined
+  cells: any[] | undefined
+  record: any | undefined
 }
 
 type HistoryState = {
@@ -33,7 +33,7 @@ function clone<T>(v: T): T {
 }
 
 export function cloneSnapshot(s: HistorySnapshot): HistorySnapshot {
-  return { label: s.label, filas: clone(s.filas), celdas: clone(s.celdas), archivo: clone(s.archivo) }
+  return { label: s.label, rows: clone(s.rows), cells: clone(s.cells), record: clone(s.record) }
 }
 
 export const useHistoryStore = create<HistoryState>((set, get) => ({

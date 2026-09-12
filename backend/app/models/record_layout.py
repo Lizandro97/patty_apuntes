@@ -7,17 +7,17 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.session import Base
 
 
-class ArchivoDiseno(Base):
-    """Diseño visual por archivo: sección 'hoja' (A4: orientación, zoom,
-    dimensiones) o 'tabla' (anchos de columna, altos de fila)."""
+class RecordLayout(Base):
+    """Visual design per record: 'sheet' section (A4: orientation, zoom,
+    dimensions) or 'table' section (column widths, row heights)."""
 
-    __tablename__ = "archivo_diseno"
-    __table_args__ = (UniqueConstraint("archivo_id", "seccion", name="uq_diseno_seccion"),)
+    __tablename__ = "record_layouts"
+    __table_args__ = (UniqueConstraint("record_id", "section", name="uq_layout_section"),)
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    archivo_id: Mapped[str] = mapped_column(
-        String, ForeignKey("archivos.id", ondelete="CASCADE"), index=True
+    record_id: Mapped[str] = mapped_column(
+        String, ForeignKey("records.id", ondelete="CASCADE"), index=True
     )
-    seccion: Mapped[str] = mapped_column(String)  # hoja | tabla
+    section: Mapped[str] = mapped_column(String)  # sheet | table
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)

@@ -1,9 +1,9 @@
-from .archivo import Archivo
-from .archivo_diseno import ArchivoDiseno
-from .archivo_fila import ArchivoFila
-from .celda import Celda
-from .config import Configuracion
-from .empresa import Empresa
+from .cell import Cell
+from .company import Company
+from .record import Record
+from .record_layout import RecordLayout
+from .record_row import RecordRow
+from .settings import Settings
 from .user import User
 
-__all__ = ["User", "Empresa", "Archivo", "ArchivoDiseno", "ArchivoFila", "Celda", "Configuracion"]
+__all__ = ["User", "Company", "Record", "RecordLayout", "RecordRow", "Cell", "Settings"]

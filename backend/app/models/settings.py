@@ -7,8 +7,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.session import Base
 
 
-class Configuracion(Base):
-    __tablename__ = "configuraciones"
+class Settings(Base):
+    __tablename__ = "settings"
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id: Mapped[str] = mapped_column(
         String, ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True
@@ -24,13 +24,14 @@ class Configuracion(Base):
     visible_fields: Mapped[dict] = mapped_column(
         JSON,
         default=lambda: {
-            "nombres": True,
-            "responsable": True,
-            "fecha": True,
-            "observaciones": True,
+            "names": True,
+            "assignee": True,
+            "date": True,
+            "notes": True,
         },
     )
     table_header_bg: Mapped[str] = mapped_column(String, default="#e0e7ff")
+    language: Mapped[str] = mapped_column(String, default="es")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
     )

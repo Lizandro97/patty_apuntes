@@ -3,17 +3,17 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
-class EmpresaCreate(BaseModel):
-    nombre: str
+class CompanyCreate(BaseModel):
+    name: str
 
 
-class EmpresaUpdate(BaseModel):
-    nombre: str
+class CompanyUpdate(BaseModel):
+    name: str
 
 
-class EmpresaOut(BaseModel):
+class CompanyOut(BaseModel):
     id: str
-    nombre: str
+    name: str
     created_at: datetime
 
     class Config:

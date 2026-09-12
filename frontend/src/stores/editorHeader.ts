@@ -1,9 +1,9 @@
 import { create } from "zustand"
 
 type HeaderState = {
-  archivoId: string | null
-  titulo: string
-  filas: number
+  recordId: string | null
+  title: string
+  rowCount: number
   dirty: boolean
   set: (p: Partial<HeaderState>) => void
   setDirty: (v: boolean) => void
@@ -12,9 +12,9 @@ type HeaderState = {
 }
 
 export const useEditorHeaderStore = create<HeaderState>((set) => ({
-  archivoId: null,
-  titulo: "",
-  filas: 0,
+  recordId: null,
+  title: "",
+  rowCount: 0,
   dirty: false,
   set: (p) => set(p as any),
   setDirty: (v) => set({ dirty: v }),
