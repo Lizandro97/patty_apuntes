@@ -562,7 +562,7 @@ def update_celda(
     if data.observacion is not None:
         c.observacion = data.observacion
     if data.color is not None:
-        c.color = data.color
+        c.color = data.color or None
     if data.style is not None:
         c.style = data.style
     db.commit()

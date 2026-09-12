@@ -13,6 +13,13 @@ import { Plus, Minus, Trash2, ArrowUp, ArrowDown, Users, Calendar, Check, Save, 
 
 const MESES = ["E","F","M","A","M","J","J","A","S","O","N","D"]
 
+// Color por persona (índice P1..Pn). Paleta fija distinguible y apta daltónicos;
+// la hoja siempre es clara, así que vale para los 3 temas.
+export const PERSON_COLORS = [
+  "#0072B2", "#E69F00", "#009E73", "#D55E00", "#CC79A7",
+  "#56B4E9", "#F0E442", "#8B5CF6", "#10B981", "#999999",
+]
+
 function EmpresaPicker({ fila, empresas, onSelect, onClose }: { fila: any; empresas: any[]; onSelect: (v: { empresa_id?: string }) => void; onClose: () => void }) {
   const [q, setQ] = useState("")
   const ref = useRef<HTMLDivElement>(null)
@@ -178,6 +185,19 @@ export function Editor() {
   const [panelTab, setPanelTab] = useState<"tabla" | "diseno">("tabla")
   const [orientation, setOrientation] = useState<"vertical" | "horizontal">("vertical")
   const [preview, setPreview] = useState(false)
+  // Persona activa que marca (índice en PERSON_COLORS). Es de este dispositivo:
+  // se guarda en localStorage, no en el backend.
+  const [personIdx, setPersonIdx] = useState(0)
+  useEffect(() => {
+    try {
+      const v = Number(localStorage.getItem(`patty-persona-${archivoId}`) ?? 0)
+      setPersonIdx(Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0)
+    } catch { setPersonIdx(0) }
+  }, [archivoId])
+  const choosePerson = (i: number) => {
+    setPersonIdx(i)
+    try { localStorage.setItem(`patty-persona-${archivoId}`, String(i)) } catch { /* noop */ }
+  }
   const pastLen = useHistoryStore((s) => s.past.length)
   const futureLen = useHistoryStore((s) => s.future.length)
   const undoTip = useHistoryStore((s) => (s.past.length ? s.past[s.past.length - 1].label : null))
@@ -275,6 +295,8 @@ export function Editor() {
   const guideRow = (fid: string) => activeGuide?.axis === "y" && activeGuide.key === fid
   const HEADER_KEY = "header"
   const headerH: number | undefined = rowH[HEADER_KEY]
+  // Celda seleccionada (foco para recolorear desde el panel sin desmarcar)
+  const [sel, setSel] = useState<{ filaId: string; anio: number; mes: number } | null>(null)
   useEffect(() => { if (archivo) { setScaleStart(archivo.periodo_inicio); setScaleEnd(archivo.periodo_fin); setTipoTmp(archivo.tipo_revision ?? "") } }, [archivo])
   const createArchivo = useMutation({ mutationFn: async () => (await api.post("/archivos", newArchivoPayload())).data, onSuccess: (d) => setArchivoId(d.id) })
   useEffect(() => { if (!id && !archivoId) createArchivo.mutate() }, [])
@@ -414,6 +436,7 @@ export function Editor() {
       const editable = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)
       if (e.key === "Escape") {
         if (preview) { setPreview(false); return }
+        if (sel) { setSel(null); return }
         return
       }
       if ((e.ctrlKey || e.metaKey) && !editable) {
@@ -424,18 +447,45 @@ export function Editor() {
     }
     document.addEventListener("keydown", h)
     return () => document.removeEventListener("keydown", h)
-  }, [preview, archivoId, filas, celdas, archivo])
+  }, [preview, sel, archivoId, filas, celdas, archivo])
   const toggle = useMutation({
-    mutationFn: async (c: any) => (await api.put(`/archivos/celdas/${c.id}`, { revisado: !c.revisado })).data,
+    mutationFn: async (c: any) => {
+      const myColor = PERSON_COLORS[activePerson] ?? ""
+      if (!c.revisado) return (await api.put(`/archivos/celdas/${c.id}`, { revisado: true, color: myColor })).data
+      const owner = PERSON_COLORS.indexOf(c.color ?? "")
+      if (owner !== activePerson) return (await api.put(`/archivos/celdas/${c.id}`, { revisado: true, color: myColor })).data
+      return (await api.put(`/archivos/celdas/${c.id}`, { revisado: false, color: "" })).data
+    },
     onMutate: async (c: any) => {
-      pushHistory(c?.revisado ? "Desmarcar mes" : "Marcar mes")
+      const myColor = PERSON_COLORS[activePerson] ?? ""
+      const owner = PERSON_COLORS.indexOf(c?.color ?? "")
+      const action = !c?.revisado ? "mark" : (owner !== activePerson ? "recolor" : "unmark")
+      const color = action === "unmark" ? "" : myColor
+      pushHistory(action === "mark" ? `Marcar mes · P${activePerson + 1}` : action === "recolor" ? `Recolorear mes P${owner + 1}→P${activePerson + 1}` : "Desmarcar mes")
       hdr.setDirty(true)
       await qc.cancelQueries({ queryKey: ["celdas", archivoId] })
       const prev = qc.getQueryData(["celdas", archivoId])
-      qc.setQueryData(["celdas", archivoId], (old: any) => (old ?? []).map((x: any) => x.id === c.id ? { ...x, revisado: !x.revisado } : x))
+      qc.setQueryData(["celdas", archivoId], (old: any) => (old ?? []).map((x: any) => x.id === c.id ? { ...x, revisado: action !== "unmark", color } : x))
       return { prev }
     },
     onError: (_e, _c, ctx: any) => { if (ctx?.prev) qc.setQueryData(["celdas", archivoId], ctx.prev) },
+    onSettled: () => { qc.invalidateQueries({ queryKey: ["celdas", archivoId] }); qc.invalidateQueries({ queryKey: ["stats", archivoId] }) },
+  })
+  // Recolorear la celda seleccionada desde el panel (marca si estaba vacía, nunca desmarca)
+  const recolor = useMutation({
+    mutationFn: async ({ id, color }: { id: string; color: string }) => (await api.put(`/archivos/celdas/${id}`, { revisado: true, color })).data,
+    onMutate: async (v: { id: string; color: string }) => {
+      await qc.cancelQueries({ queryKey: ["celdas", archivoId] })
+      const prev = qc.getQueryData(["celdas", archivoId])
+      const cur = ((prev as any[]) ?? []).find((x: any) => x.id === v.id)
+      const from = PERSON_COLORS.indexOf(cur?.color ?? "")
+      const to = PERSON_COLORS.indexOf(v.color)
+      pushHistory(cur?.revisado ? `Recolorear mes ${from >= 0 ? `P${from + 1}→` : ""}P${to + 1}` : `Marcar mes · P${to + 1}`)
+      hdr.setDirty(true)
+      qc.setQueryData(["celdas", archivoId], (old: any) => (old ?? []).map((x: any) => x.id === v.id ? { ...x, revisado: true, color: v.color } : x))
+      return { prev }
+    },
+    onError: (_e, _v, ctx: any) => { if (ctx?.prev) qc.setQueryData(["celdas", archivoId], ctx.prev) },
     onSettled: () => { qc.invalidateQueries({ queryKey: ["celdas", archivoId] }); qc.invalidateQueries({ queryKey: ["stats", archivoId] }) },
   })
   const addFila = useMutation({ mutationFn: async (p:any) => (await api.post(`/archivos/${archivoId}/filas`, p)).data, onMutate: () => { pushHistory("Agregar fila"); hdr.setDirty(true) }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["filas", archivoId] }); qc.invalidateQueries({ queryKey: ["celdas", archivoId] }) } })
@@ -501,6 +551,11 @@ export function Editor() {
     + (cfg.visible_fields.observaciones ? (colW.observaciones ?? 140) : 0)
   const tableMinWidth = fixedSum + monthSum
   const personalOpts=Array.from({length: archivo.personal_count||2},(_,i)=>`P${i+1}`)
+  const activePerson = Math.min(personIdx, Math.max(0, (archivo?.personal_count ?? 1) - 1))
+  const ownerOf = (color: string | null | undefined) => PERSON_COLORS.indexOf(color ?? "")
+  const selCeldas: any[] = (celdas as any[]) ?? []
+  const selCelda = sel ? selCeldas.find((c: any) => c.fila_id === sel.filaId && c.anio === sel.anio && c.mes === sel.mes) : undefined
+  const selFilaNombre = sel ? ((orderedFilas.find((f: any) => f.id === sel.filaId) as any)?.nombre_snapshot ?? "") : ""
   const move=(idx:number,dir:-1|1)=>{
     const o=[...orderedFilas]; const t=idx+dir; if(t<0||t>=o.length) return
     const tmp=o[idx]; o[idx]=o[t]; o[t]=tmp
@@ -545,7 +600,7 @@ export function Editor() {
             <div className="hidden md:flex items-center gap-0.5" role="group" aria-label="Edición">
               <button onClick={doUndo} disabled={pastLen===0} title={undoTip ? `Deshacer: ${undoTip} (Ctrl+Z)` : "Deshacer (Ctrl+Z)"} className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition disabled:opacity-40 disabled:hover:text-[var(--text-dim)] disabled:cursor-not-allowed" aria-label="Deshacer"><Undo2 size={13}/></button>
               <button onClick={doRedo} disabled={futureLen===0} title={redoTip ? `Rehacer: ${redoTip} (Ctrl+Y)` : "Rehacer (Ctrl+Y)"} className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition disabled:opacity-40 disabled:hover:text-[var(--text-dim)] disabled:cursor-not-allowed" aria-label="Rehacer"><Redo2 size={13}/></button>
-              <button onClick={()=>setPreview(true)} title="Vista previa (solo hoja)" aria-label="Vista previa" aria-pressed={preview} className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition"><Eye size={13}/></button>
+              <button onClick={()=>{ setPreview(true); setSel(null) }} title="Vista previa (solo hoja)" aria-label="Vista previa" aria-pressed={preview} className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition"><Eye size={13}/></button>
             </div>
             <span aria-hidden className="w-px h-5 bg-[var(--border)] mx-1 shrink-0" />
             <button onClick={guardar} disabled={isMutating > 0 || saveState === "saving"} title="Validar y guardar" className={`flex items-center gap-1.5 rounded-full px-3 h-7 text-[12px] font-medium transition border whitespace-nowrap ${saveState === "saved" ? "bg-[var(--accent-soft)] border-[var(--accent-border)] text-[var(--success)]" : "bg-[var(--surface)] border-[var(--border)] text-[var(--text)] hover:text-[var(--text)] hover:border-[var(--accent-border)]"} disabled:opacity-50`}>
@@ -633,8 +688,11 @@ export function Editor() {
                                   const mk = mKey(y, mi)
                                   const accentL = guideRow(fila.id) ? { borderLeftColor: GUIDE } : null
                                   if(!c) return <span key={mi} style={{ ...monthStyle(mk), ...accentL, ...guideShadowY(fila.id) }} className={`${monthCls(mk)} grid place-items-center py-2 ${mi === 0 ? "border-l-0" : "border-l border-[var(--sheet-border)]"}`} title="Cargando..."><input type="checkbox" disabled aria-label="Cargando mes" className="w-4 h-4 accent-[var(--sheet-accent)] opacity-60" /></span>
-                                  return <label key={mi} style={{ ...monthStyle(mk), ...accentL, ...guideShadowY(fila.id) }} className={`${monthCls(mk)} grid place-items-center py-2 h-full ${mi === 0 ? "border-l-0" : "border-l border-[var(--sheet-border)]"} cursor-pointer hover:bg-[var(--sheet-soft)]`} title={c.revisado ? "Desmarcar" : "Marcar"}>
-                                    <input type="checkbox" aria-label={`Mes ${mi + 1} de ${y}`} checked={!!c.revisado} onChange={()=>toggle.mutate(c)} className="w-4 h-4 accent-[var(--sheet-accent)] cursor-pointer" />
+                                  const owner = ownerOf(c.color)
+                                  const isMine = owner === activePerson
+                                  const selected = !preview && sel?.filaId === fila.id && sel?.anio === y && sel?.mes === mi + 1
+                                  return <label key={mi} onClick={(e)=>{ if ((e.target as HTMLElement).tagName === "INPUT") return; e.preventDefault(); setSel((s) => (s && s.filaId === fila.id && s.anio === y && s.mes === mi + 1 ? null : { filaId: fila.id, anio: y, mes: mi + 1 })) }} style={{ ...monthStyle(mk), ...accentL, ...guideShadowY(fila.id), ...(selected ? { backgroundColor: "var(--accent-soft)", boxShadow: "inset 0 0 0 2px var(--accent)" } : null) }} className={`${monthCls(mk)} grid place-items-center py-2 h-full ${mi === 0 ? "border-l-0" : "border-l border-[var(--sheet-border)]"} cursor-pointer hover:bg-[var(--sheet-soft)]`} title={c.revisado ? (owner >= 0 && !isMine ? `Marcado por P${owner + 1} · clic en el check para remarcar como P${activePerson + 1}` : "Marcado · clic en el check para desmarcar") : `Marcar como P${activePerson + 1}`}>
+                                    <input type="checkbox" aria-label={`Mes ${mi + 1} de ${y}`} checked={!!c.revisado} onChange={()=>{ toggle.mutate(c); setSel(null) }} style={c.color ? { accentColor: c.color } : undefined} className="w-4 h-4 accent-[var(--sheet-accent)] cursor-pointer" />
                                   </label>
                                 })}
                               </div>
@@ -729,6 +787,47 @@ export function Editor() {
               <NumberStepper dense ariaLabel="Cantidad de personal" min={1} max={10} value={archivo.personal_count ?? 2} onChange={(n)=>{ updatePersonal.mutate(n)}} className="w-[104px]" />
               <span className="text-xs text-[var(--text-dim)] truncate">{personalOpts.join(", ")}</span>
             </div>
+            <div className="border-t border-[var(--border)] pt-2 space-y-1.5">
+              <div className="text-[10px] text-[var(--text-dim)]">Personas · marca con tu color</div>
+              <div className="grid grid-cols-2 gap-1">
+                {personalOpts.map((p, i) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={()=>choosePerson(i)}
+                    aria-pressed={activePerson === i}
+                    title={`Marcar como ${p}`}
+                    className={`flex items-center gap-1.5 h-7 px-2 rounded-lg text-xs transition border ${activePerson === i ? "bg-[var(--surface-2)] text-[var(--text)] border-[var(--accent-border)] font-medium" : "text-[var(--text-dim)] hover:text-[var(--text)] border-transparent hover:bg-[var(--surface-2)]"}`}
+                  >
+                    <span className="w-3 h-3 rounded-full shrink-0 border border-black/10" style={{ background: PERSON_COLORS[i] }} />
+                    <span className="truncate">{p}</span>
+                    {activePerson === i && <Check size={12} className="ml-auto shrink-0" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {selCelda && (
+              <div className="border-t border-[var(--border)] pt-2 space-y-1.5">
+                <div className="text-[10px] text-[var(--text-dim)]">Color del seleccionado</div>
+                <div className="text-xs text-[var(--text)] font-medium truncate">
+                  {selFilaNombre || "Fila"} · {MESES[(sel?.mes ?? 1) - 1]} {sel?.anio} · {selCelda.color && ownerOf(selCelda.color) >= 0 ? `P${ownerOf(selCelda.color) + 1}` : "sin marcar"}
+                </div>
+                <div className="grid grid-cols-5 gap-1" role="group" aria-label="Paleta de personas">
+                  {PERSON_COLORS.slice(0, archivo.personal_count || 2).map((cc, i) => (
+                    <button
+                      key={cc}
+                      type="button"
+                      onClick={()=>recolor.mutate({ id: selCelda.id, color: cc })}
+                      aria-pressed={selCelda.color === cc}
+                      aria-label={`Pintar P${i + 1}`}
+                      title={`P${i + 1}`}
+                      className={`h-7 rounded-lg border-2 transition ${selCelda.color === cc ? "border-[var(--accent)]" : "border-black/10 hover:scale-105"}`}
+                      style={{ background: cc }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex justify-between text-xs"><span className="text-[var(--text-dim)]">Total</span><span className="text-[var(--text)] font-medium">{filas.length} · {years.length} años</span></div>
             <div className="border-t border-[var(--border)] pt-2 space-y-2">
               <div className="text-[10px] text-[var(--text-dim)]">Columnas visibles</div>
