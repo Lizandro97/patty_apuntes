@@ -295,8 +295,18 @@ export function Editor() {
   const guideRow = (fid: string) => activeGuide?.axis === "y" && activeGuide.key === fid
   const HEADER_KEY = "header"
   const headerH: number | undefined = rowH[HEADER_KEY]
-  // Celda seleccionada (foco para recolorear desde el panel sin desmarcar)
+  // Celda seleccionada (foco para recolorear desde el panel sin desmarcar).
+  // Se limpia al alternar un check, con Esc, en preview o al clicar fuera de la selección/paleta.
   const [sel, setSel] = useState<{ filaId: string; anio: number; mes: number } | null>(null)
+  useEffect(() => {
+    const h = (e: PointerEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t?.closest?.("[data-sel-zone]")) return
+      setSel((s) => (s ? null : s))
+    }
+    document.addEventListener("pointerdown", h)
+    return () => document.removeEventListener("pointerdown", h)
+  }, [])
   useEffect(() => { if (archivo) { setScaleStart(archivo.periodo_inicio); setScaleEnd(archivo.periodo_fin); setTipoTmp(archivo.tipo_revision ?? "") } }, [archivo])
   const createArchivo = useMutation({ mutationFn: async () => (await api.post("/archivos", newArchivoPayload())).data, onSuccess: (d) => setArchivoId(d.id) })
   useEffect(() => { if (!id && !archivoId) createArchivo.mutate() }, [])
@@ -691,7 +701,7 @@ export function Editor() {
                                   const owner = ownerOf(c.color)
                                   const isMine = owner === activePerson
                                   const selected = !preview && sel?.filaId === fila.id && sel?.anio === y && sel?.mes === mi + 1
-                                  return <label key={mi} onClick={(e)=>{ if ((e.target as HTMLElement).tagName === "INPUT") return; e.preventDefault(); setSel((s) => (s && s.filaId === fila.id && s.anio === y && s.mes === mi + 1 ? null : { filaId: fila.id, anio: y, mes: mi + 1 })) }} style={{ ...monthStyle(mk), ...accentL, ...guideShadowY(fila.id), ...(selected ? { backgroundColor: "var(--accent-soft)", boxShadow: "inset 0 0 0 2px var(--accent)" } : null) }} className={`${monthCls(mk)} grid place-items-center py-2 h-full ${mi === 0 ? "border-l-0" : "border-l border-[var(--sheet-border)]"} cursor-pointer hover:bg-[var(--sheet-soft)]`} title={c.revisado ? (owner >= 0 && !isMine ? `Marcado por P${owner + 1} · clic en el check para remarcar como P${activePerson + 1}` : "Marcado · clic en el check para desmarcar") : `Marcar como P${activePerson + 1}`}>
+                                  return <label key={mi} data-sel-zone onClick={(e)=>{ if ((e.target as HTMLElement).tagName === "INPUT") return; e.preventDefault(); setSel((s) => (s && s.filaId === fila.id && s.anio === y && s.mes === mi + 1 ? null : { filaId: fila.id, anio: y, mes: mi + 1 })) }} style={{ ...monthStyle(mk), ...accentL, ...guideShadowY(fila.id), ...(selected ? { backgroundColor: "var(--accent-soft)", boxShadow: "inset 0 0 0 2px var(--accent)" } : null) }} className={`${monthCls(mk)} grid place-items-center py-2 h-full ${mi === 0 ? "border-l-0" : "border-l border-[var(--sheet-border)]"} cursor-pointer hover:bg-[var(--sheet-soft)]`} title={c.revisado ? (owner >= 0 && !isMine ? `Marcado por P${owner + 1} · clic en el check para remarcar como P${activePerson + 1}` : "Marcado · clic en el check para desmarcar") : `Marcar como P${activePerson + 1}`}>
                                     <input type="checkbox" aria-label={`Mes ${mi + 1} de ${y}`} checked={!!c.revisado} onChange={()=>{ toggle.mutate(c); setSel(null) }} style={c.color ? { accentColor: c.color } : undefined} className="w-4 h-4 accent-[var(--sheet-accent)] cursor-pointer" />
                                   </label>
                                 })}
@@ -807,7 +817,7 @@ export function Editor() {
               </div>
             </div>
             {selCelda && (
-              <div className="border-t border-[var(--border)] pt-2 space-y-1.5">
+              <div data-sel-zone className="border-t border-[var(--border)] pt-2 space-y-1.5">
                 <div className="text-[10px] text-[var(--text-dim)]">Color del seleccionado</div>
                 <div className="text-xs text-[var(--text)] font-medium truncate">
                   {selFilaNombre || "Fila"} · {MESES[(sel?.mes ?? 1) - 1]} {sel?.anio} · {selCelda.color && ownerOf(selCelda.color) >= 0 ? `P${ownerOf(selCelda.color) + 1}` : "sin marcar"}
