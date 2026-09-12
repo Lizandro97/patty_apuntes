@@ -19,15 +19,16 @@ export function Records() {
   const [title,setTitle]=useState("")
   const [q,setQ]=useState("")
   const [sort,setSort]=useState<"date"|"progress"|"title">("date")
-  const [edit,setEdit]=useState<any>(null)
+  const [renameRec,setRenameRec]=useState<any|null>(null)
+  const [renameTitle,setRenameTitle]=useState("")
   const [dlRec,setDlRec]=useState<any|null>(null)
   const [delRec,setDelRec]=useState<any|null>(null)
   useEffect(() => {
-    if (!dlRec && !delRec) return
-    const k = (e: KeyboardEvent) => { if (e.key === "Escape") { setDlRec(null); setDelRec(null) } }
+    if (!dlRec && !delRec && !renameRec) return
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") { setDlRec(null); setDelRec(null); setRenameRec(null) } }
     document.addEventListener("keydown", k)
     return () => document.removeEventListener("keydown", k)
-  }, [dlRec, delRec])
+  }, [dlRec, delRec, renameRec])
   const PAGE = 50
   const [page, setPage] = useState(0)
   useEffect(() => setPage(0), [q, sort, (data as any[])?.length])
@@ -36,7 +37,7 @@ export function Records() {
   const safePage = Math.min(page, pages - 1)
   const list = filtered.slice(safePage * PAGE, safePage * PAGE + PAGE)
   const create = useMutation({ mutationFn: async()=> (await api.post("/records",{...newRecordPayload(), title: title || defaultTitle()})).data, onSuccess:(d)=> { qc.invalidateQueries({queryKey:["records"]}); setTitle(""); nav(`/editor/${d.id}`) } })
-  const rename = useMutation({ mutationFn: async()=> (await api.put(`/records/${edit.id}`,{title: edit.title})).data, onSuccess:()=> { qc.invalidateQueries({queryKey:["records"]}); setEdit(null) } })
+  const rename = useMutation({ mutationFn: async({id,title}:{id:string;title:string})=> (await api.put(`/records/${id}`,{title})).data, onSuccess:()=> { qc.invalidateQueries({queryKey:["records"]}); setRenameRec(null) }, onError:()=> { push({ kind: "error", title: t("common.saveError"), actionLabel: t("common.retry"), onAction: ()=>renameTitle.trim() && renameRec && rename.mutate({id: renameRec.id, title: renameTitle.trim()}) }) } })
   const del = useMutation({ mutationFn: async(id:string)=> api.delete(`/records/${id}`), onSuccess:()=> qc.invalidateQueries({queryKey:["records"]}) })
   const fmtDate = (d?: string) => {
     if (!d) return t("records.notUpdated")
@@ -74,16 +75,20 @@ export function Records() {
             <Button onClick={()=>create.mutate()} disabled={create.isPending} className="bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] rounded-lg h-9"><Plus size={16}/> {t("records.createAndOpen")}</Button>
           </div>
         </div>
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-dim)]" />
-            <Input aria-label={t("records.searchPlaceholder")} placeholder={t("records.searchPlaceholder")} value={q} onChange={e=>setQ(e.target.value)} className="h-9 bg-[var(--surface)] border-[var(--border)] text-[var(--text)] placeholder:text-[var(--text-dim)] rounded-lg pl-9" />
+        <div>
+          <label htmlFor="records-search" className="block text-xs font-medium text-[var(--text)] px-1 pb-1.5">{t("records.searchLabel")}</label>
+          <div className="flex items-stretch h-11 rounded-xl bg-[var(--surface)] border border-[var(--border)] focus-within:border-[var(--accent)] transition overflow-hidden">
+            <div className="relative flex-1 min-w-0">
+              <Search size={14} aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-dim)]" />
+              <input id="records-search" aria-label={t("records.searchLabel")} placeholder={t("records.searchPlaceholder")} value={q} onChange={e=>setQ(e.target.value)} className="w-full h-full bg-transparent text-[var(--text)] placeholder:text-[var(--text-dim)] text-sm pl-9 pr-2 focus:outline-none" />
+            </div>
+            <span aria-hidden className="w-px self-stretch my-2 bg-[var(--border)] shrink-0" />
+            <select aria-label={t("records.sortLabel")} title={t("records.sortLabel")} value={sort} onChange={e=>setSort(e.target.value as any)} className="shrink-0 h-full bg-transparent text-[var(--text-dim)] text-xs font-medium pl-2 pr-1 focus:outline-none focus:text-[var(--text)] cursor-pointer">
+              <option value="date">{t("records.sortRecent")}</option>
+              <option value="progress">{t("records.sortProgress")}</option>
+              <option value="title">{t("records.sortTitle")}</option>
+            </select>
           </div>
-          <select aria-label={t("records.sortLabel")} value={sort} onChange={e=>setSort(e.target.value as any)} className="h-11 bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] text-xs rounded-lg px-3">
-            <option value="date">{t("records.sortRecent")}</option>
-            <option value="progress">{t("records.sortProgress")}</option>
-            <option value="title">{t("records.sortTitle")}</option>
-          </select>
         </div>
         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
@@ -100,18 +105,10 @@ export function Records() {
                 <tr key={a.id} className="hover:bg-[var(--surface-2)] transition">
                   <td className="p-3 text-[var(--text-dim)] font-mono text-xs">{i+1}</td>
                   <td className="p-3 min-w-0">
-                    {edit?.id===a.id ? (
-                      <span className="flex gap-1.5">
-                        <Input aria-label={t("records.renameFileAria")} value={edit.title} onChange={ev=>setEdit({...edit,title:ev.target.value})} onKeyDown={ev=>{ if(ev.key==="Enter") rename.mutate(); if(ev.key==="Escape") setEdit(null) }} className="h-11 bg-[var(--bg)] border-[var(--border)] text-[var(--text)]" />
-                        <Button onClick={()=>rename.mutate()} disabled={rename.isPending} className="min-h-[44px] bg-[var(--accent)] text-[var(--on-accent)] rounded-lg px-3 text-xs">{t("records.save")}</Button>
-                        <Button variant="ghost" onClick={()=>setEdit(null)} className="min-h-[44px] text-[var(--text-dim)] text-xs">{t("records.cancel")}</Button>
-                      </span>
-                    ) : (
-                      <span className="block min-w-0">
-                        <button onClick={()=>nav(`/editor/${a.id}`)} title={t("records.openInEditor")} aria-label={t("records.openFileAria", { title: a.title })} className="font-medium truncate text-[var(--text)] hover:text-[var(--accent)] hover:underline underline-offset-4 decoration-[var(--accent-border)] decoration-2 cursor-pointer transition-colors text-sm block max-w-full rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]">{a.title}</button>
-                        <span className="text-xs text-[var(--text-dim)]">{a.review_type ? `${a.review_type} • ` : ""}{a.period_start}-{a.period_end}</span>
-                      </span>
-                    )}
+                    <span className="block min-w-0">
+                      <button onClick={()=>nav(`/editor/${a.id}`)} title={t("records.openInEditor")} aria-label={t("records.openFileAria", { title: a.title })} className="font-medium truncate text-[var(--text)] hover:text-[var(--accent)] hover:underline underline-offset-4 decoration-[var(--accent-border)] decoration-2 cursor-pointer transition-colors text-sm block max-w-full rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]">{a.title}</button>
+                      <span className="text-xs text-[var(--text-dim)]">{a.review_type ? `${a.review_type} • ` : ""}{a.period_start}-{a.period_end}</span>
+                    </span>
                   </td>
                   <td className="p-3 min-w-[140px]">
                     <span className="flex items-center gap-2" role="progressbar" aria-valuenow={a.progress ?? 0} aria-valuemin={0} aria-valuemax={100} aria-label={t("home.progressLabel", { progress: a.progress ?? 0 })}>
@@ -122,7 +119,7 @@ export function Records() {
                   <td className="p-3 text-xs text-[var(--text-dim)] whitespace-nowrap">{fmtDate(a.updated_at)}</td>
                   <td className="p-3 text-center whitespace-nowrap">
                     <span className="inline-flex gap-1.5 justify-center items-center">
-                      {edit?.id===a.id ? null : (<Button variant="outline" onClick={()=>setEdit({id:a.id,title:a.title})} title={t("records.rename")} aria-label={t("records.renameFileAria")} className="min-w-[44px] min-h-[44px] p-0 shrink-0 bg-[var(--bg)] border-[var(--border)] text-[var(--text-dim)] hover:text-[var(--text)]"><Pencil size={16}/></Button>)}
+                      <Button variant="outline" onClick={()=>{ setRenameRec(a); setRenameTitle(a.title) }} title={t("records.rename")} aria-label={t("records.renameFileAria")} aria-haspopup="dialog" className="min-w-[44px] min-h-[44px] p-0 shrink-0 bg-[var(--bg)] border-[var(--border)] text-[var(--text-dim)] hover:text-[var(--text)]"><Pencil size={16}/></Button>
                       <Button variant="ghost" title={t("records.download")} aria-label={t("records.downloadFileAria", { title: a.title })} aria-haspopup="dialog" onClick={()=>setDlRec(a)} className="min-w-[44px] min-h-[44px] p-0 shrink-0 text-[var(--text-dim)] hover:text-[var(--text)]"><Download size={16}/></Button>
                       <Button variant="ghost" title={t("records.delete")} aria-label={t("records.deleteFileAria", { title: a.title })} aria-haspopup="dialog" onClick={()=>setDelRec(a)} className="min-w-[44px] min-h-[44px] p-0 shrink-0 text-[var(--text-dim)] hover:text-[var(--danger)]"><Trash2 size={16}/></Button>
                     </span>
@@ -167,6 +164,23 @@ export function Records() {
           <div className="flex gap-2">
             <Button variant="outline" onClick={()=>setDelRec(null)} className="flex-1 min-h-[44px] rounded-xl">{t("records.cancel")}</Button>
             <Button onClick={()=>{ del.mutate(delRec.id); setDelRec(null) }} disabled={del.isPending} className="flex-1 min-h-[44px] bg-[var(--danger)] hover:brightness-110 text-[var(--on-accent)] rounded-xl">{t("records.confirmDelete")}</Button>
+          </div>
+        </div>
+      </div>
+    )}
+    {renameRec && (
+      <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" onClick={()=>setRenameRec(null)}>
+        <div role="dialog" aria-modal="true" aria-label={t("records.renameTitle", { title: renameRec.title })} className="w-[360px] max-w-full bg-[var(--surface)] border border-[var(--border)] rounded-2xl shadow-2xl p-5" onClick={e=>e.stopPropagation()}>
+          <div className="flex items-start justify-between gap-2">
+            <div className="text-sm font-semibold text-[var(--text)]">{t("records.renameTitle", { title: renameRec.title })}</div>
+            <button onClick={()=>setRenameRec(null)} aria-label={t("common.close")} className="w-9 h-9 -mt-1 -mr-1 grid place-items-center rounded-lg text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]"><X size={16}/></button>
+          </div>
+          <div className="mt-4 space-y-3">
+            <Input autoFocus aria-label={t("records.renameFileAria")} value={renameTitle} onChange={e=>setRenameTitle(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter" && renameTitle.trim() && !rename.isPending) rename.mutate({id: renameRec.id, title: renameTitle.trim()}) }} className="h-11 bg-[var(--bg)] border-[var(--border)] text-[var(--text)]" />
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={()=>setRenameRec(null)} className="flex-1 min-h-[44px] rounded-xl">{t("records.cancel")}</Button>
+              <Button onClick={()=>rename.mutate({id: renameRec.id, title: renameTitle.trim()})} disabled={!renameTitle.trim() || rename.isPending} className="flex-1 min-h-[44px] bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] rounded-xl">{t("records.save")}</Button>
+            </div>
           </div>
         </div>
       </div>

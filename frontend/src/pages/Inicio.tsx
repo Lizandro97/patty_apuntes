@@ -26,7 +26,7 @@ export function Inicio() {
             <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">{t("home.title")}</h1>
             <p className="text-sm text-[var(--text-dim)]">{t("home.subtitle")}</p>
           </div>
-          <Link to="/records" className="bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] font-medium rounded-lg px-4 py-2 min-h-[44px] inline-flex items-center text-sm flex items-center gap-1.5">
+          <Link to="/editor" className="bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] font-medium rounded-lg px-4 py-2 min-h-[44px] inline-flex items-center text-sm flex items-center gap-1.5">
             {t("home.newFile")} <ArrowUpRight size={14}/>
           </Link>
         </div>
