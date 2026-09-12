@@ -9,7 +9,7 @@ import { useEditorHeaderStore } from "@/stores/editorHeader"
 import { useHistoryStore, type HistorySnapshot } from "@/stores/history"
 import { useUiStore } from "@/stores/ui"
 import { currentYear, newArchivoPayload } from "@/lib/defaults"
-import { Plus, Minus, Trash2, ArrowUp, ArrowDown, Users, Calendar, Check, Save, Download, Eye, Undo2, Redo2, Settings2, FileText, Table2, Palette, RectangleVertical, RectangleHorizontal, PanelRightClose, PanelRightOpen, ChevronUp, ChevronDown } from "lucide-react"
+import { Plus, Minus, Trash2, ArrowUp, ArrowDown, Users, Calendar, Check, Save, Download, Eye, Undo2, Redo2, Settings2, FileText, Table2, Palette, RectangleVertical, RectangleHorizontal, PanelRightClose, PanelRightOpen, ChevronUp, ChevronDown, Menu, MoreHorizontal, Pencil } from "lucide-react"
 
 const MESES = ["E","F","M","A","M","J","J","A","S","O","N","D"]
 
@@ -151,7 +151,11 @@ function DragHandle({ axis, title, zoom, startV, min, onV, onReset, onHover, onD
       onDoubleClick={(e) => { e.stopPropagation(); onReset() }}
       onPointerDown={(e) => {
         (e.target as HTMLElement).setPointerCapture(e.pointerId)
-        st.current = { p: axis === "x" ? e.clientX : e.clientY, v: startV }
+        // Base = medida real renderizada (no el default asumido): evita el salto brusco inicial
+        const parent = (e.currentTarget as HTMLElement).parentElement
+        const rect = parent?.getBoundingClientRect()
+        const measured = rect ? (axis === "x" ? rect.width : rect.height) / (zoom || 1) : 0
+        st.current = { p: axis === "x" ? e.clientX : e.clientY, v: measured > 0 ? measured : startV }
         setOn(true)
         onDrag?.(true)
         e.preventDefault()
@@ -213,6 +217,7 @@ export function Editor() {
   const sheetBase = orientation === "horizontal" ? { w: 1273, h: 900 } : { w: 900, h: 1273 }
   const rightOpen = useUiStore((s) => s.rightOpen)
   const setRightOpen = useUiStore((s) => s.setRightOpen)
+  const setMobileOpen = useUiStore((s) => s.setMobileOpen)
   const rightCollapsed = !rightOpen
   const setRightCollapsed = (v: boolean) => setRightOpen(!v)
   const { data: archivo } = useQuery({ queryKey: ["archivo", archivoId], enabled: !!archivoId, queryFn: async () => (await api.get(`/archivos/${archivoId}`)).data })
@@ -509,6 +514,8 @@ export function Editor() {
   const [validAlert, setValidAlert] = useState<any[] | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
   const exportRef = useRef<HTMLDivElement>(null)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const moreRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!exportOpen) return
     const h = (e: MouseEvent) => { if (exportRef.current && !exportRef.current.contains(e.target as Node)) setExportOpen(false) }
@@ -517,6 +524,14 @@ export function Editor() {
     document.addEventListener("keydown", k)
     return () => { document.removeEventListener("mousedown", h); document.removeEventListener("keydown", k) }
   }, [exportOpen])
+  useEffect(() => {
+    if (!moreOpen) return
+    const h = (e: MouseEvent) => { if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false) }
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") setMoreOpen(false) }
+    document.addEventListener("mousedown", h)
+    document.addEventListener("keydown", k)
+    return () => { document.removeEventListener("mousedown", h); document.removeEventListener("keydown", k) }
+  }, [moreOpen])
   const orderedFilas = ((filas as any[]) ?? []).slice().sort((a: any, b: any) => a.orden - b.orden)
   // required for save/export: every row needs a registered empresa (months can be filled freely)
   const missingEmpresa = () => orderedFilas.filter((f: any) => !f.empresa_id).map((f: any, i: number) => ({ fila: i + 1, id: f.id, campo: "empresa", nombre: f.nombre_snapshot }))
@@ -580,12 +595,39 @@ export function Editor() {
 
   return (
     <div className="flex flex-1 min-w-0 min-h-0 bg-[var(--bg)]">
-      {/* Canvas — white page like Foliora */}
-      <div className="flex-1 bg-[var(--bg)] flex flex-col min-w-0 overflow-auto">
-        <div className="sticky top-0 z-10 flex justify-center px-3 py-2 bg-[var(--bg)]/90 backdrop-blur border-b border-[var(--border)] text-[12px] text-[var(--text-dim)]">
-          <div className="flex items-center gap-1 overflow-x-auto max-w-full bg-[var(--surface)] border border-[var(--border)] rounded-full pl-3 pr-1.5 py-1 shadow-sm" role="toolbar" aria-label="Herramientas del editor">
-            <span className="text-[var(--text)] whitespace-nowrap">Página 1</span>
-            <span aria-hidden className="w-px h-5 bg-[var(--border)] mx-1 shrink-0" />
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
+        {/* Barra única del editor: título + vista + acciones */}
+        <div className="flex items-center gap-2 px-3 h-[52px] bg-[var(--bg)] border-b border-[var(--border)] shrink-0 text-[12px] text-[var(--text-dim)]" role="toolbar" aria-label="Barra del editor">
+          <button
+            onClick={() => setMobileOpen(true)}
+            title="Abrir menú"
+            aria-label="Abrir menú"
+            className="lg:hidden w-9 h-9 shrink-0 flex items-center justify-center rounded-lg text-[var(--text-dim)] hover:bg-[var(--surface)] hover:text-[var(--text)] transition"
+          >
+            <Menu size={18} />
+          </button>
+          {hdr.archivoId ? (
+            <span className="flex items-center gap-2 rounded-lg bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--border-strong)] focus-within:border-[var(--accent)] pl-2.5 pr-1 py-[3px] flex-1 min-w-0 max-w-[380px] transition shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)]">
+              <Pencil size={13} className="text-[var(--text-dim)] shrink-0" aria-hidden />
+              <input
+                value={hdr.titulo}
+                onChange={e=>{ hdr.set({ titulo: e.target.value }); hdr.setDirty(true) }}
+                onBlur={e=>hdr.onSaveTitle?.(e.target.value)}
+                onKeyDown={e=>{ if(e.key==="Enter") (e.target as HTMLInputElement).blur() }}
+                placeholder="Nombre del archivo"
+                aria-label="Nombre del archivo"
+                className="flex-1 min-w-0 bg-transparent px-1 py-[3px] text-[14px] font-medium text-[var(--text)] text-left truncate focus:outline-none placeholder:text-[var(--text-dim)] placeholder:font-normal cursor-text"
+              />
+              <span className="hidden lg:flex items-center gap-1.5 text-[12px] text-[var(--text-dim)] shrink-0">
+                <span className={`w-2 h-2 rounded-full inline-block ${hdr.dirty ? "bg-amber-500" : "bg-emerald-500"}`} />
+                {hdr.dirty ? "Sin guardar" : "Guardado"} · {hdr.filas} filas
+              </span>
+            </span>
+          ) : (
+            <span className="flex-1 min-w-0" aria-hidden />
+          )}
+          <span className="hidden xl:block flex-1" aria-hidden />
+          <div className="hidden xl:flex items-center gap-1 shrink-0" role="group" aria-label="Vista y edición">
             <div className="flex items-center gap-0.5" role="group" aria-label="Orientación de hoja">
               <button onClick={()=>changeOrientation("vertical")} title="Vertical" aria-pressed={orientation==="vertical"} className={`w-7 h-7 flex items-center justify-center rounded-full transition ${orientation==="vertical" ? "bg-[var(--surface-2)] text-[var(--text)] border border-[var(--accent-border)]" : "text-[var(--text-dim)] hover:text-[var(--text)] border border-transparent"}`}>
                 <RectangleVertical size={13}/>
@@ -606,29 +648,74 @@ export function Editor() {
                 <Plus size={13}/>
               </button>
             </div>
-            <span aria-hidden className="hidden md:block w-px h-5 bg-[var(--border)] mx-1 shrink-0" />
-            <div className="hidden md:flex items-center gap-0.5" role="group" aria-label="Edición">
+            <span aria-hidden className="w-px h-5 bg-[var(--border)] mx-1 shrink-0" />
+            <div className="flex items-center gap-0.5" role="group" aria-label="Edición">
               <button onClick={doUndo} disabled={pastLen===0} title={undoTip ? `Deshacer: ${undoTip} (Ctrl+Z)` : "Deshacer (Ctrl+Z)"} className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition disabled:opacity-40 disabled:hover:text-[var(--text-dim)] disabled:cursor-not-allowed" aria-label="Deshacer"><Undo2 size={13}/></button>
               <button onClick={doRedo} disabled={futureLen===0} title={redoTip ? `Rehacer: ${redoTip} (Ctrl+Y)` : "Rehacer (Ctrl+Y)"} className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition disabled:opacity-40 disabled:hover:text-[var(--text-dim)] disabled:cursor-not-allowed" aria-label="Rehacer"><Redo2 size={13}/></button>
               <button onClick={()=>{ setPreview(true); setSel(null) }} title="Vista previa (solo hoja)" aria-label="Vista previa" aria-pressed={preview} className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] transition"><Eye size={13}/></button>
             </div>
             <span aria-hidden className="w-px h-5 bg-[var(--border)] mx-1 shrink-0" />
-            <button onClick={guardar} disabled={isMutating > 0 || saveState === "saving"} title="Validar y guardar" className={`flex items-center gap-1.5 rounded-full px-3 h-7 text-[12px] font-medium transition border whitespace-nowrap ${saveState === "saved" ? "bg-[var(--accent-soft)] border-[var(--accent-border)] text-[var(--success)]" : "bg-[var(--surface)] border-[var(--border)] text-[var(--text)] hover:text-[var(--text)] hover:border-[var(--accent-border)]"} disabled:opacity-50`}>
-              {saveState === "saved" ? <><Check size={13}/> Guardado</> : saveState === "saving" ? "Guardando..." : <><Save size={13}/> Guardar</>}
+          </div>
+          <button onClick={guardar} disabled={isMutating > 0 || saveState === "saving"} title="Validar y guardar" className={`flex items-center gap-1.5 rounded-full px-3 h-8 text-[12px] font-medium transition border shrink-0 ${saveState === "saved" ? "bg-[var(--accent-soft)] border-[var(--accent-border)] text-[var(--success)]" : "bg-[var(--surface)] border-[var(--border)] text-[var(--text)] hover:text-[var(--text)] hover:border-[var(--accent-border)]"} disabled:opacity-50`}>
+            {saveState === "saved" ? <><Check size={13}/><span className="hidden min-[420px]:inline">Guardado</span></> : saveState === "saving" ? "Guardando..." : <><Save size={13}/><span className="hidden min-[420px]:inline">Guardar</span></>}
+          </button>
+          <div ref={exportRef} className="relative shrink-0">
+            <button onClick={()=>setExportOpen(!exportOpen)} title="Exportar" aria-haspopup="menu" aria-expanded={exportOpen} className="flex items-center gap-1.5 rounded-full px-3 h-8 text-[12px] font-medium bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] transition whitespace-nowrap">
+              <Download size={13}/><span className="hidden min-[420px]:inline">Exportar</span> <span className="text-[10px]">▾</span>
             </button>
-            <div ref={exportRef} className="relative shrink-0">
-              <button onClick={()=>setExportOpen(!exportOpen)} title="Exportar" aria-haspopup="menu" aria-expanded={exportOpen} className="flex items-center gap-1.5 rounded-full px-3 h-7 text-[12px] font-medium bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] transition whitespace-nowrap">
-                <Download size={13}/> Exportar <span className="text-[10px]">▾</span>
-              </button>
-              {exportOpen && (
-                <div role="menu" className="absolute right-0 top-full mt-1 w-[150px] bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-xl p-1.5 z-30">
-                  <button role="menuitem" onClick={()=>{ setExportOpen(false); exportar("pdf") }} className="w-full text-left px-3 py-2 rounded-lg text-xs text-[var(--text)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]">Descargar PDF</button>
-                  <button role="menuitem" onClick={()=>{ setExportOpen(false); exportar("excel") }} className="w-full text-left px-3 py-2 rounded-lg text-xs text-[var(--text)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]">Descargar Excel</button>
+            {exportOpen && (
+              <div role="menu" className="absolute right-0 top-full mt-1 w-[150px] bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-xl p-1.5 z-30">
+                <button role="menuitem" onClick={()=>{ setExportOpen(false); exportar("pdf") }} className="w-full text-left px-3 py-2 rounded-lg text-xs text-[var(--text)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]">Descargar PDF</button>
+                <button role="menuitem" onClick={()=>{ setExportOpen(false); exportar("excel") }} className="w-full text-left px-3 py-2 rounded-lg text-xs text-[var(--text)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]">Descargar Excel</button>
+              </div>
+            )}
+          </div>
+          <div ref={moreRef} className="relative shrink-0 xl:hidden">
+            <button onClick={()=>setMoreOpen(!moreOpen)} title="Más herramientas" aria-label="Más herramientas" aria-haspopup="menu" aria-expanded={moreOpen} className="w-9 h-9 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface)] border border-transparent hover:border-[var(--border)] transition">
+              <MoreHorizontal size={16}/>
+            </button>
+            {moreOpen && (
+              <div role="menu" className="absolute right-0 top-full mt-1 w-[220px] bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-xl p-2 z-30 space-y-2">
+                <div>
+                  <div className="text-[10px] text-[var(--text-dim)] px-2 pb-1">Orientación</div>
+                  <div className="flex items-center gap-1" role="group" aria-label="Orientación de hoja">
+                    <button onClick={()=>changeOrientation("vertical")} title="Vertical" aria-pressed={orientation==="vertical"} className={`flex-1 h-8 flex items-center justify-center gap-1.5 rounded-lg text-xs transition border ${orientation==="vertical" ? "bg-[var(--surface-2)] text-[var(--text)] border-[var(--accent-border)]" : "text-[var(--text-dim)] hover:text-[var(--text)] border-transparent"}`}>
+                      <RectangleVertical size={13}/> Vertical
+                    </button>
+                    <button onClick={()=>changeOrientation("horizontal")} title="Horizontal" aria-pressed={orientation==="horizontal"} className={`flex-1 h-8 flex items-center justify-center gap-1.5 rounded-lg text-xs transition border ${orientation==="horizontal" ? "bg-[var(--surface-2)] text-[var(--text)] border-[var(--accent-border)]" : "text-[var(--text-dim)] hover:text-[var(--text)] border-transparent"}`}>
+                      <RectangleHorizontal size={13}/> Horizontal
+                    </button>
+                  </div>
                 </div>
-              )}
-            </div>
+                <div>
+                  <div className="text-[10px] text-[var(--text-dim)] px-2 pb-1">Zoom</div>
+                  <div className="flex items-center gap-1" role="group" aria-label="Zoom de hoja">
+                    <button onClick={()=>stepZoom(-1)} title="Reducir zoom" aria-label="Reducir zoom" className="flex-1 h-8 flex items-center justify-center rounded-lg text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] transition">
+                      <Minus size={13}/>
+                    </button>
+                    <button onClick={()=>changeZoom(defaultZoom(orientation))} title="Restablecer zoom" className="flex-1 h-8 text-[11px] font-mono text-[var(--text)] hover:bg-[var(--surface-2)] rounded-lg">
+                      {Math.round(zoom * 100)}%
+                    </button>
+                    <button onClick={()=>stepZoom(1)} title="Ampliar zoom" aria-label="Ampliar zoom" className="flex-1 h-8 flex items-center justify-center rounded-lg text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] transition">
+                      <Plus size={13}/>
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-[var(--text-dim)] px-2 pb-1">Edición</div>
+                  <div className="flex items-center gap-1" role="group" aria-label="Edición">
+                    <button onClick={doUndo} disabled={pastLen===0} title={undoTip ? `Deshacer: ${undoTip} (Ctrl+Z)` : "Deshacer (Ctrl+Z)"} aria-label="Deshacer" className="flex-1 h-8 flex items-center justify-center rounded-lg text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] transition disabled:opacity-40 disabled:cursor-not-allowed"><Undo2 size={13}/></button>
+                    <button onClick={doRedo} disabled={futureLen===0} title={redoTip ? `Rehacer: ${redoTip} (Ctrl+Y)` : "Rehacer (Ctrl+Y)"} aria-label="Rehacer" className="flex-1 h-8 flex items-center justify-center rounded-lg text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] transition disabled:opacity-40 disabled:cursor-not-allowed"><Redo2 size={13}/></button>
+                    <button onClick={()=>{ setPreview(true); setSel(null); setMoreOpen(false) }} title="Vista previa (solo hoja)" aria-label="Vista previa" className="flex-1 h-8 flex items-center justify-center rounded-lg text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] transition"><Eye size={13}/></button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
+        <div className="flex flex-1 min-w-0 min-h-0">
+        {/* Canvas — white page like Foliora */}
+        <div className="flex-1 bg-[var(--bg)] flex flex-col min-w-0 overflow-auto">
         <div className="flex-1 min-w-0 p-6 overflow-auto bg-[var(--bg)]">
           {preview && (
             <>
@@ -880,6 +967,7 @@ export function Editor() {
         </>
         )}
       </div>
+      </div>
 
       {/* Alert: required fields missing for save/export */}
       {validAlert && (
@@ -898,6 +986,7 @@ export function Editor() {
           </div>
         </div>
       )}
+    </div>
     </div>
   )
 }

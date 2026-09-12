@@ -1,7 +1,6 @@
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom"
-import { Home, FileText, Building2, Files, Settings, LogOut, Sun, Leaf, Menu, ChevronDown, PanelLeftClose, PanelLeftOpen, Pencil } from "lucide-react"
+import { Home, FileText, Building2, Files, Settings, LogOut, Sun, Leaf, Menu, ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import { useAuthStore } from "@/stores/auth"
-import { useEditorHeaderStore } from "@/stores/editorHeader"
 import { useUiStore } from "@/stores/ui"
 import { THEMES, useThemeStore } from "@/stores/theme"
 import { useEffect, useRef, useState } from "react"
@@ -196,45 +195,6 @@ function Sidebar() {
   )
 }
 
-function Topbar() {
-  const hdr = useEditorHeaderStore()
-  const setMobileOpen = useUiStore((s) => s.setMobileOpen)
-  const rightOpen = useUiStore((s) => s.rightOpen)
-  return (
-    <header className="relative h-[52px] flex items-center gap-3 px-3 bg-[var(--bg)] border-b border-[var(--border)] shrink-0 no-print">
-      <button
-        onClick={() => setMobileOpen(true)}
-        title="Abrir menú"
-        aria-label="Abrir menú"
-        className="lg:hidden w-9 h-9 flex items-center justify-center rounded-lg text-[var(--text-dim)] hover:bg-[var(--surface)] hover:text-[var(--text)] transition"
-      >
-        <Menu size={18} />
-      </button>
-      <div className={`flex-1 flex justify-center min-w-0 px-2 transition-[padding] duration-300 ${rightOpen ? "xl:pr-[320px]" : "xl:pr-[56px]"}`}>
-        {hdr.archivoId && (
-          <span className="hidden md:flex items-center gap-2 rounded-lg bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--border-strong)] focus-within:border-[var(--accent)] pl-2.5 pr-1 py-[3px] w-[340px] max-w-[44vw] transition shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)]">
-            <Pencil size={13} className="text-[var(--text-dim)] shrink-0" aria-hidden />
-            <input
-              value={hdr.titulo}
-              onChange={e=>{ hdr.set({ titulo: e.target.value }); hdr.setDirty(true) }}
-              onBlur={e=>hdr.onSaveTitle?.(e.target.value)}
-              onKeyDown={e=>{ if(e.key==="Enter") (e.target as HTMLInputElement).blur() }}
-              placeholder="Nombre del archivo"
-              aria-label="Nombre del archivo"
-              className="flex-1 min-w-0 bg-transparent px-1 py-[3px] text-[14px] font-medium text-[var(--text)] text-left truncate focus:outline-none placeholder:text-[var(--text-dim)] placeholder:font-normal cursor-text"
-            />
-            <span className="hidden lg:flex items-center gap-1.5 text-[12px] text-[var(--text-dim)] shrink-0">
-              <span className={`w-2 h-2 rounded-full inline-block ${hdr.dirty ? "bg-amber-500" : "bg-emerald-500"}`} />
-              {hdr.dirty ? "Sin guardar" : "Guardado"} · {hdr.filas} filas
-            </span>
-          </span>
-        )}
-      </div>
-      <div className="w-9 shrink-0 lg:hidden" aria-hidden />
-    </header>
-  )
-}
-
 function MobileBar() {
   const setMobileOpen = useUiStore((s) => s.setMobileOpen)
   return (
@@ -262,7 +222,7 @@ export function Layout() {
     <div className="h-dvh flex bg-[var(--bg)] text-[var(--text)] overflow-hidden">
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
-        {isEditor ? <Topbar /> : <MobileBar />}
+        {!isEditor && <MobileBar />}
         <div className="flex-1 flex min-w-0 min-h-0">
           <Outlet />
         </div>
