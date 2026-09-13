@@ -12,6 +12,7 @@ export type AppSettings = {
   show_summary: boolean
   rounded_borders: boolean
   pastel_mode: boolean
+  autosave: boolean
   layout_mode: "sidebar" | "fullscreen"
   visible_fields: {
     names: boolean
@@ -34,6 +35,7 @@ const defaults: AppSettings = {
   show_summary: true,
   rounded_borders: true,
   pastel_mode: true,
+  autosave: true,
   layout_mode: "sidebar",
   visible_fields: { names: true, assignee: true, date: true, notes: true },
 }
@@ -67,7 +69,8 @@ export const useSettingsStore = create<Store>()(
         else r.classList.remove("pastel")
       },
     }),
-    { name: "patty-config", version: 2, migrate: (persisted: any) => {
+    { name: "patty-config", version: 3, migrate: (persisted: any) => {
+        if (persisted && persisted.autosave === undefined) persisted.autosave = true
         const vf = persisted?.visible_fields
         if (vf && typeof vf === "object") {
           persisted.visible_fields = {

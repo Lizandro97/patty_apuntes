@@ -72,7 +72,7 @@ export function Records() {
           </div>
           <div className="flex gap-2 bg-[var(--surface)] border border-[var(--border)] rounded-xl p-2">
             <Input aria-label={t("records.newTitlePlaceholder")} placeholder={t("records.newTitlePlaceholder")} value={title} onChange={e=>setTitle(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter" && !create.isPending) create.mutate() }} className="w-64 h-9 bg-[var(--bg)] border-[var(--border)] text-[var(--text)] placeholder:text-[var(--text-dim)] rounded-lg" />
-            <Button onClick={()=>create.mutate()} disabled={create.isPending} className="bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] rounded-lg h-9"><Plus size={16}/> {t("records.createAndOpen")}</Button>
+            <Button onClick={()=>create.mutate()} disabled={create.isPending} className="bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] rounded-lg h-9"><Plus size={16}/> {t("records.create")}</Button>
           </div>
         </div>
         <div>
@@ -138,7 +138,7 @@ export function Records() {
               </span>
             </div>
           )}
-          {list.length===0 && <div className="text-center py-12 text-sm text-[var(--text-dim)] border-t border-[var(--border)] space-y-3"><div>{q ? t("records.noResults") : t("records.noFiles")}</div>{!q && (data as any[])?.length===0 && <Button onClick={()=>create.mutate()} disabled={create.isPending} className="bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] rounded-lg min-h-[44px]"><Plus size={16}/> {t("records.createFile")}</Button>}</div>}
+          {list.length===0 && <div className="text-center py-12 text-sm text-[var(--text-dim)] border-t border-[var(--border)]">{q ? t("records.noResults") : t("records.noFiles")}</div>}
         </div>
       </div>
     </div>

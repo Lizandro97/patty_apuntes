@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom"
-import { Home, FileText, Building2, Files, Settings, LogOut, Sun, Leaf, Menu, ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import { Home, FileText, Building2, Files, Settings, LogOut, Palette, Leaf, Menu, ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import { useAuthStore } from "@/stores/auth"
 import { useUiStore } from "@/stores/ui"
 import { THEMES, useThemeStore } from "@/stores/theme"
@@ -9,9 +9,9 @@ import { cn } from "@/lib/utils"
 
 const items = [
   { to: "/", key: "home", labelKey: "nav.home", icon: Home },
-  { to: "/editor", key: "editor", labelKey: "nav.editor", icon: FileText },
-  { to: "/companies", key: "companies", labelKey: "nav.companies", icon: Building2 },
   { to: "/records", key: "records", labelKey: "nav.records", icon: Files },
+  { to: "/companies", key: "companies", labelKey: "nav.companies", icon: Building2 },
+  { to: "/editor", key: "editor", labelKey: "nav.editor", icon: FileText },
 ] as const
 
 function shortName(fullName: string | undefined, email: string | undefined) {
@@ -28,6 +28,7 @@ function ProfileFooter({ collapsed }: { collapsed: boolean }) {
   const theme = useThemeStore((s) => s.theme)
   const setTheme = useThemeStore((s) => s.setTheme)
   const [open, setOpen] = useState(false)
+  const [themeOpen, setThemeOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!open) return
@@ -87,25 +88,34 @@ function ProfileFooter({ collapsed }: { collapsed: boolean }) {
             >
               <Settings size={15} /> {t("nav.settings")}
             </button>
-            <div role="group" aria-label={t("nav.theme")} className="px-3 py-2">
-              <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-dim)] mb-1.5 px-2" aria-hidden>
-                <Sun size={12} /> {t("nav.theme")}
-              </div>
-              <div className="space-y-1">
-                {THEMES.map((th) => (
-                  <button
-                    key={th.id}
-                    role="menuitemradio"
-                    aria-checked={theme === th.id}
-                    onClick={() => setTheme(th.id)}
-                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-[13px] text-[var(--text)] hover:bg-[var(--surface-2)] transition"
-                  >
-                    <span className="w-4 h-4 rounded-full border border-black/10" style={{ background: th.dot }} />
-                    {t(`nav.themes.${th.id}`)}
-                    <span className="ml-auto text-[var(--accent)] text-xs">{theme === th.id ? "✓" : ""}</span>
-                  </button>
-                ))}
-              </div>
+            <div className="relative">
+              <button
+                role="menuitem"
+                aria-expanded={themeOpen}
+                aria-controls="theme-submenu"
+                onClick={() => setThemeOpen(v => !v)}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] text-[var(--text)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] transition"
+              >
+                <Palette size={15} /> {t("nav.theme")}
+                <ChevronDown size={14} className={`ml-auto text-[var(--text-dim)] shrink-0 transition-transform sm:-rotate-90 ${themeOpen ? "rotate-180 sm:rotate-90" : ""}`} />
+              </button>
+              {themeOpen && (
+                <div id="theme-submenu" role="group" aria-label={t("nav.theme")} className="px-1.5 pb-1 space-y-1 sm:absolute sm:left-full sm:top-0 sm:ml-2 sm:w-[200px] sm:p-1.5 sm:bg-[var(--surface)] sm:border sm:border-[var(--border)] sm:rounded-xl sm:shadow-[0_16px_40px_rgba(0,0,0,0.5)] sm:z-50">
+                  {THEMES.map((th) => (
+                    <button
+                      key={th.id}
+                      role="menuitemradio"
+                      aria-checked={theme === th.id}
+                      onClick={() => { setTheme(th.id); setThemeOpen(false) }}
+                      className="w-full flex items-center gap-2.5 pl-9 pr-3 py-2.5 rounded-lg text-[13px] text-[var(--text)] hover:bg-[var(--surface-2)] transition sm:pl-3"
+                    >
+                      <span className="w-4 h-4 rounded-full border border-black/10" style={{ background: th.dot }} />
+                      {t(`nav.themes.${th.id}`)}
+                      <span className="ml-auto text-[var(--accent)] text-xs">{theme === th.id ? "✓" : ""}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="border-t border-[var(--border)] mt-1 pt-1">

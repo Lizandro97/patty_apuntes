@@ -131,6 +131,23 @@ export function Settings() {
             </select>
           </div>
           <p className="text-xs text-[var(--text-dim)]">{t("settings.tableNote")}</p>
+          <div className="border-t border-[var(--border)] pt-4">
+            <div className="flex items-center justify-between gap-3 min-h-[44px]">
+              <div>
+                <div className="text-sm font-medium text-[var(--text)]">{t("settings.autosave")}</div>
+                <div className="text-xs text-[var(--text-dim)]">{t("settings.autosaveHint")}</div>
+              </div>
+              <button
+                role="switch"
+                aria-checked={settings.autosave !== false}
+                aria-label={t("settings.autosave")}
+                onClick={() => markDirty(() => settings.set({ autosave: !(settings.autosave !== false) }))}
+                className={`relative w-[52px] h-8 shrink-0 rounded-full border transition ${settings.autosave !== false ? "bg-[var(--accent)] border-[var(--accent)]" : "bg-[var(--surface-2)] border-[var(--border)]"}`}
+              >
+                <span aria-hidden className={`absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white shadow transition-all ${settings.autosave !== false ? "left-[24px]" : "left-[3px]"}`} />
+              </button>
+            </div>
+          </div>
           <div className="flex gap-2 items-center flex-wrap">
             <Button onClick={save} disabled={saving || !dirty} className="min-h-[44px] rounded-lg">{saving ? t("common.loading") : t("settings.saveToServer")}</Button>
             <Button variant="outline" onClick={resetAll} className="min-h-[44px] rounded-lg">{t("settings.reset")}</Button>

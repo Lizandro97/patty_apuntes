@@ -1,7 +1,8 @@
 import { useQuery, useMutation, useQueryClient, useIsMutating } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { useNavigate, useParams } from "react-router-dom"
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useLayoutEffect, useState, useRef } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import i18n from "@/i18n"
 import { Button } from "@/components/ui/button"
@@ -10,7 +11,7 @@ import { useSettingsStore } from "@/stores/settings"
 import { useEditorHeaderStore } from "@/stores/editorHeader"
 import { useHistoryStore, type HistorySnapshot } from "@/stores/history"
 import { useUiStore } from "@/stores/ui"
-import { currentYear, defaultTitle } from "@/lib/defaults"
+import { currentYear } from "@/lib/defaults"
 import { useToast } from "@/lib/toast"
 import { downloadBlob, exportFilename } from "@/lib/filenames"
 import { Plus, Minus, Trash2, ArrowUp, ArrowDown, Users, Calendar, Check, Save, Download, Eye, Undo2, Redo2, Settings2, FileText, Table2, Palette, RectangleVertical, RectangleHorizontal, PanelRightClose, PanelRightOpen, ChevronUp, ChevronDown, Menu, MoreHorizontal, Pencil } from "lucide-react"
@@ -22,10 +23,36 @@ export const PERSON_COLORS = [
   "#56B4E9", "#B58900", "#8B5CF6", "#10B981", "#999999",
 ]
 
-function CompanyPicker({ row, companies, onSelect, onClose }: { row: any; companies: any[]; onSelect: (v: { company_id?: string }) => void; onClose: () => void }) {
+// Floating overlay: portal to body + fixed position so dropdowns float above
+// the scrollable sheet instead of being clipped by it. Anchored to the trigger,
+// flips up when there is no room below, clamps to the viewport, follows scroll.
+function useFloatPos(anchor: React.RefObject<HTMLElement | null>, open: boolean, w: number, estH = 320) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  useLayoutEffect(() => {
+    if (!open) { setPos(null); return }
+    const place = () => {
+      const el = anchor.current
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      const vw = window.innerWidth, vh = window.innerHeight
+      const left = Math.max(8, Math.min(r.left, vw - w - 8))
+      const below = r.bottom + 8
+      const top = below + estH <= vh ? below : Math.max(8, r.top - estH - 8)
+      setPos({ top, left })
+    }
+    place()
+    window.addEventListener("scroll", place, true)
+    window.addEventListener("resize", place)
+    return () => { window.removeEventListener("scroll", place, true); window.removeEventListener("resize", place) }
+  }, [open, anchor, w, estH])
+  return pos
+}
+
+function CompanyPicker({ row, companies, anchorRef, onSelect, onClose }: { row: any; companies: any[]; anchorRef: React.RefObject<HTMLButtonElement | null>; onSelect: (v: { company_id?: string }) => void; onClose: () => void }) {
   const { t } = useTranslation()
   const [q, setQ] = useState("")
   const ref = useRef<HTMLDivElement>(null)
+  const pos = useFloatPos(anchorRef, true, 280, 300)
   useEffect(() => {
     const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose() }
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose() }
@@ -34,8 +61,8 @@ function CompanyPicker({ row, companies, onSelect, onClose }: { row: any; compan
     return () => { document.removeEventListener("mousedown", h); document.removeEventListener("keydown", k) }
   }, [onClose])
   const filtered = companies.filter((e: any) => e.name.toLowerCase().includes(q.toLowerCase()))
-  return (
-    <div ref={ref} role="listbox" aria-label={t("editor.table.searchCompanyAria")} className="absolute z-30 top-full left-0 mt-1 w-[280px] bg-white border border-[var(--sheet-border)] rounded-xl shadow-[0_12px_32px_rgba(132,24,67,0.15)] p-2">
+  return createPortal(
+    <div ref={ref} role="listbox" aria-label={t("editor.table.searchCompanyAria")} style={{ position: "fixed", top: pos?.top ?? -9999, left: pos?.left ?? 8, width: 280, zIndex: 70, visibility: pos ? "visible" : "hidden" }} className="bg-white border border-[var(--sheet-border)] rounded-xl shadow-[0_12px_32px_rgba(132,24,67,0.15)] p-2">
       <Input autoFocus aria-label={t("editor.table.searchCompanyAria")} placeholder={t("editor.table.searchCompanyPh")} value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{ if(e.key==="Escape") onClose() }} className="h-8 text-sm mb-2 bg-[var(--sheet-soft)] border-[var(--sheet-border)] text-[#1e293b] placeholder:text-[var(--text-dim)]" />
       <div className="max-h-[180px] overflow-auto space-y-1">
         {filtered.map((e:any)=>(<button key={e.id} role="option" aria-selected={row.company_id===e.id} onClick={()=>onSelect({company_id: e.id })} className="w-full text-left px-3 py-2 rounded-lg hover:bg-[var(--sheet-soft)] text-sm flex items-center justify-between text-[#1e293b]"><span>{e.name}</span><span className="text-[11px] text-[var(--sheet-accent)]">{row.company_id===e.id ? "✓" : ""}</span></button>))}
@@ -46,7 +73,8 @@ function CompanyPicker({ row, companies, onSelect, onClose }: { row: any; compan
           <button onClick={()=>onSelect({company_id: "" })} className="w-full text-left px-3 py-2 rounded-lg hover:bg-[var(--danger)]/10 text-xs text-[var(--text-dim)] hover:text-[var(--danger)]">{t("editor.table.removeCompany")}</button>
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -55,17 +83,20 @@ function RowMenu({ row, idx, total, onMove, onDelete, onMarkRow }: { row: any; i
   const [open, setOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const trigRef = useRef<HTMLButtonElement>(null)
+  const menuPos = useFloatPos(trigRef, open, 190, 320)
   useEffect(() => {
     if (!open) return
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setConfirming(false) } }
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node) && !(trigRef.current && trigRef.current.contains(e.target as Node))) { setOpen(false); setConfirming(false) } }
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") { setOpen(false); setConfirming(false) } }
     document.addEventListener("mousedown", h)
     document.addEventListener("keydown", k)
     return () => { document.removeEventListener("mousedown", h); document.removeEventListener("keydown", k) }
   }, [open])
   return (
-    <div ref={ref} className="absolute bottom-0 right-0">
+    <div className="absolute bottom-0 right-0">
       <button
+        ref={trigRef}
         onClick={() => { setOpen(!open); setConfirming(false) }}
         title={t("editor.table.rowOptions")}
         aria-label={t("editor.table.rowOptions")}
@@ -73,8 +104,8 @@ function RowMenu({ row, idx, total, onMove, onDelete, onMarkRow }: { row: any; i
         aria-expanded={open}
         className="flex w-7 h-7 items-center justify-center rounded-lg text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--sheet-soft)] border border-transparent hover:border-[var(--sheet-border)] transition-opacity cursor-pointer md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 focus-visible:opacity-100"
       >⋯</button>
-      {open && (
-        <div className="absolute top-full left-0 mt-1 w-[190px] bg-white border border-[var(--sheet-border)] rounded-xl shadow-[0_12px_32px_rgba(132,24,67,0.15)] p-1.5 z-30 text-left">
+      {open && createPortal(
+        <div ref={ref} style={{ position: "fixed", top: menuPos?.top ?? -9999, left: menuPos?.left ?? 8, width: 190, zIndex: 70, visibility: menuPos ? "visible" : "hidden" }} className="bg-white border border-[var(--sheet-border)] rounded-xl shadow-[0_12px_32px_rgba(132,24,67,0.15)] p-1.5 text-left">
           {!confirming ? (
             <>
               <button onClick={() => { onMarkRow(true); setOpen(false) }} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs text-[#1e293b] hover:bg-[var(--sheet-soft)]"><Check size={13}/> {t("editor.table.markRow")}</button>
@@ -96,7 +127,8 @@ function RowMenu({ row, idx, total, onMove, onDelete, onMarkRow }: { row: any; i
               </div>
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
@@ -216,12 +248,18 @@ export function Editor() {
   const header = useEditorHeaderStore()
   const MONTHS = t("editor.months", { returnObjects: true }) as string[]
   const recordId = id
+  const pickBtnRef = useRef<HTMLButtonElement | null>(null)
   // Draft mode: /editor without :id opens a blank sheet that lives only in
   // local cache. Zero server writes until the user hits Guardar. Opened files
   // keep the existing autosave behavior.
   const isDraft = !recordId
+  // Autosave (device-local setting): when OFF, file edits stay local until Guardar
   const persist = <T,>(fn: () => Promise<T>): Promise<T | null> =>
-    isDraft ? Promise.resolve(null) : fn()
+    (isDraft || settings.autosave === false) ? Promise.resolve(null) : fn()
+  const localOnly = isDraft || settings.autosave === false
+  // Last server-confirmed state, for reconciling on Guardar with autosave OFF
+  // (effect placed after the queries — see below)
+  const savedRef = useRef<HistorySnapshot | null>(null)
   const [pickRowId, setPickRowId] = useState<string | null>(null)
   const [scaleStart, setScaleStart] = useState(currentYear())
   const [scaleEnd, setScaleEnd] = useState(currentYear())
@@ -248,6 +286,19 @@ export function Editor() {
   const undoTip = useHistoryStore((s) => (s.past.length ? s.past[s.past.length - 1].label : null))
   const redoTip = useHistoryStore((s) => (s.future.length ? s.future[s.future.length - 1].label : null))
   const [zoom, setZoom] = useState(1)
+  // Whole-sheet zoom: the sheet scales visually; the spacer reserves layout space.
+  // offsetHeight is layout (unscaled), so measuring it compensates the gap.
+  const sheetRef = useRef<HTMLDivElement>(null)
+  const [sheetH, setSheetH] = useState(0)
+  useEffect(() => {
+    const el = sheetRef.current
+    if (!el) return
+    const measure = () => setSheetH(el.offsetHeight)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
   const stepZoom = (dir: 1 | -1) => {
     const i = ZOOM_STEPS.reduce((best, v, idx) => (Math.abs(v - zoom) < Math.abs(ZOOM_STEPS[best] - zoom) ? idx : best), 0)
     const next = Math.min(ZOOM_STEPS.length - 1, Math.max(0, i + dir))
@@ -274,6 +325,16 @@ export function Editor() {
     : statsData
   const { data: companies } = useQuery({ queryKey: ["companies"], queryFn: async () => (await api.get("/companies")).data })
   const { data: design } = useQuery({ queryKey: ["design", recordId], enabled: !!recordId, queryFn: async () => (await api.get(`/records/${recordId}/layout`)).data })
+  useEffect(() => {
+    if (!isDraft && record && rows && cells && !savedRef.current) {
+      savedRef.current = {
+        label: "saved",
+        rows: qc.getQueryData(["rows", recordId]),
+        cells: qc.getQueryData(["cells", recordId]),
+        record: qc.getQueryData(["record", recordId]),
+      }
+    }
+  }, [isDraft, record, rows, cells])
   const designPayload = (sec: "sheet" | "table"): any =>
     ((design as any[]) ?? []).find((d: any) => d.section === sec)?.payload ?? {}
   const colWidths: Record<string, number> = designPayload("table").cols ?? {}
@@ -316,11 +377,17 @@ export function Editor() {
     if (typeof h.zoom === "number" && h.zoom >= 0.5 && h.zoom <= 1.5) setZoom(h.zoom)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [design, recordId])
-  const colStyle = (key: string) =>
-    (colWidths[key] ? { width: colWidths[key], minWidth: colWidths[key] } : undefined) as any
-  const monthClass = (key: string) =>
-    `${colWidths[key] ? "flex-none" : "flex-1"} text-center relative`
-  const monthStyle = (key: string) => (colWidths[key] ? { width: colWidths[key] } : undefined) as any
+  // Fixed layout: every column always carries an explicit width (custom or default),
+  // so the table measures exactly its content and never stretches columns to fill.
+  const COL_DEFAULTS: Record<string, number> = { n: 44, company: 160, assignee: 90, notes: 140 }
+  const MONTH_DEFAULT = 34
+  const colStyle = (key: string) => {
+    const w = colWidths[key] ?? COL_DEFAULTS[key] ?? 0
+    return (w ? { width: w, minWidth: w, maxWidth: w } : undefined) as any
+  }
+  const monthClass = (_key: string) => `flex-none text-center relative`
+  const monthStyle = (key: string) => ({ width: colWidths[key] ?? MONTH_DEFAULT }) as any
+  const yearWidth = (y: number) => MONTHS.reduce((a: number, _, mi: number) => a + (colWidths[monthKey(y, mi)] ?? MONTH_DEFAULT), 0)
   const resizeCol = (key: string, w: number) =>
     patchDesign("table", (p) => ({ ...p, cols: { ...p.cols, [key]: w } }))
   const resetCol = (key: string) =>
@@ -391,7 +458,7 @@ export function Editor() {
     if (!isDraft) return
     const y = currentYear()
     if (!qc.getQueryData(["record", recordId])) {
-      qc.setQueryData(["record", recordId], { id: "draft", title: defaultTitle(), review_type: "", period_start: y, period_end: y, staff_count: 2 })
+      qc.setQueryData(["record", recordId], { id: "draft", title: "", review_type: "", period_start: y, period_end: y, staff_count: 2 })
     }
     if (!qc.getQueryData(["rows", recordId])) {
       qc.setQueryData(["rows", recordId], Array.from({ length: 5 }, (_, i) => ({
@@ -401,12 +468,12 @@ export function Editor() {
     if (!qc.getQueryData(["cells", recordId])) qc.setQueryData(["cells", recordId], [])
     if (!qc.getQueryData(["design", recordId])) qc.setQueryData(["design", recordId], [])
     const h = useEditorHeaderStore.getState()
-    if (!h.recordId) header.set({ recordId: "draft", title: defaultTitle(), rowCount: 5 } as any)
+    if (!h.recordId) header.set({ recordId: "draft", title: "", rowCount: 5 } as any)
   }, [isDraft])
-  // Draft: materialize a cell object for every row x year x month so the whole
-  // sheet (toggle/mark/recolor/history) works exactly like a saved file
+  // Local-only mode (draft, or file with autosave OFF): materialize a cell object
+  // for every row x year x month so the whole sheet works exactly like a saved file
   useEffect(() => {
-    if (!isDraft || !record || !rows) return
+    if ((!isDraft && settings.autosave !== false) || !record || !rows) return
     const have = new Set(((qc.getQueryData(["cells", recordId]) as any[]) ?? []).map((c: any) => `${c.row_id}-${c.year}-${c.month}`))
     const add: any[] = []
     for (const r of (rows as any[])) {
@@ -419,7 +486,7 @@ export function Editor() {
       }
     }
     if (add.length) qc.setQueryData(["cells", recordId], (old: any) => [...(old ?? []), ...add])
-  }, [isDraft, record, rows])
+  }, [isDraft, settings.autosave, record, rows])
   // Draft: warn before losing unsaved work on reload/close
   useEffect(() => {
     if (!isDraft) return
@@ -428,6 +495,17 @@ export function Editor() {
     }
     window.addEventListener("beforeunload", h)
     return () => window.removeEventListener("beforeunload", h)
+  }, [isDraft])
+  // Draft: wipe local cache on unmount so the next new file starts blank.
+  // (StrictMode remounts re-seed from scratch — nothing typed yet at that point.)
+  useEffect(() => {
+    if (!isDraft) return
+    return () => {
+      for (const k of ["record", "rows", "cells", "design"] as const) {
+        qc.removeQueries({ queryKey: [k, undefined] })
+      }
+      useEditorHeaderStore.getState().set({ recordId: null, title: "", rowCount: 0, dirty: false } as any)
+    }
   }, [isDraft])
   useEffect(() => { useHistoryStore.getState().clear() }, [recordId])
   // Riley: refresh mid-flow no pierde `dirty`
@@ -471,8 +549,8 @@ export function Editor() {
     if (s.record !== undefined) qc.setQueryData(["record", recordId], s.record)
   }
   // Brings the server to the `target` state, using `source` (previous local state) for a minimal diff.
-  const syncSnapshotToServer = async (target: HistorySnapshot, source: HistorySnapshot) => {
-    if (isDraft) return // undo/redo is local-only until Guardar
+  const syncSnapshotToServer = async (target: HistorySnapshot, source: HistorySnapshot, force = false) => {
+    if (localOnly && !force) return // undo/redo stays local until Guardar
     const tFilas: any[] = target.rows ?? []
     const sFilas: any[] = source.rows ?? []
     const tCeldas: any[] = target.cells ?? []
@@ -483,6 +561,14 @@ export function Editor() {
       const patch: any = {}
       for (const k of ["title", "review_type", "period_start", "period_end", "staff_count"]) {
         if (ta[k] !== sa[k] && ta[k] !== undefined) patch[k] = ta[k]
+      }
+      if (Object.keys(patch).length) {
+        try { await api.put(`/records/${recordId}`, patch) } catch { /* best-effort */ }
+      }
+    } else if (ta && !sa) {
+      const patch: any = {}
+      for (const k of ["title", "review_type", "period_start", "period_end", "staff_count"]) {
+        if (ta[k] !== undefined) patch[k] = ta[k]
       }
       if (Object.keys(patch).length) {
         try { await api.put(`/records/${recordId}`, patch) } catch { /* best-effort */ }
@@ -515,7 +601,7 @@ export function Editor() {
             const byKey = new Map(fresh.filter((c: any) => c.row_id === created.id).map((c: any) => [`${c.year}-${c.month}`, c]))
             await Promise.all(want.map((w: any) => {
               const hit = byKey.get(`${w.year}-${w.month}`)
-              return hit ? api.put(`/records/cells/${hit.id}`, {reviewed: true }).catch(() => null) : null
+              return hit ? api.put(`/records/cells/${hit.id}`, {reviewed: true, color: w.color ?? "" }).catch(() => null) : null
             }))
           }
         } catch { /* best-effort */ }
@@ -541,16 +627,16 @@ export function Editor() {
     if (tOrder && tOrder !== sOrder) {
       try { await api.post(`/records/${recordId}/rows/reorder`, {ids: tFilas.slice().sort((a: any, b: any) => a.position - b.position).map((f: any) => f.id) }) } catch { /* best-effort */ }
     }
-    // Common cells (same id) with different reviewed flag -> PUT
+    // Common cells (same id) with different reviewed flag or color -> PUT
     const sById = new Map(sCeldas.map((c: any) => [c.id, c]))
     const changed = tCeldas.filter((c: any) => {
       if (recreatedOldIds.has(c.row_id)) return false
       const s = sById.get(c.id)
-      return s && !!s.reviewed !== !!c.reviewed
+      return s && (!!s.reviewed !== !!c.reviewed || (s.color ?? "") !== (c.color ?? ""))
     })
     if (changed.length) {
       await Promise.all(changed.map((c: any) =>
-        api.put(`/records/cells/${c.id}`, {reviewed: !!c.reviewed }).catch(() => null)
+        api.put(`/records/cells/${c.id}`, {reviewed: !!c.reviewed, color: c.color ?? "" }).catch(() => null)
       ))
     }
   }
@@ -783,16 +869,28 @@ export function Editor() {
     if (miss.length) { setValidAlert(miss); return }
     setSaveState("saving")
     try {
-      // Autosave honesto: el título/tipo/escala ya hacen PUT al editar.
-      // "Revisar y cerrar" persiste el layout pendiente y revalida contra servidor.
-      const pending = (designTimers.current.sheet || designTimers.current.table)
-      if (pending) await new Promise((r) => setTimeout(r, 550))
+      if (settings.autosave === false) {
+        // Manual mode: reconcile local cache against the last server-confirmed state
+        const cur = snapshotCurrent("save")
+        await syncSnapshotToServer(cur, savedRef.current ?? { label: "", rows: [], cells: [], record: undefined }, true)
+      } else {
+        // Autosave honesto: el título/tipo/escala ya hacen PUT al editar.
+        // Guardar persiste el layout pendiente y revalida contra servidor.
+        const pending = (designTimers.current.sheet || designTimers.current.table)
+        if (pending) await new Promise((r) => setTimeout(r, 550))
+      }
       await Promise.all([
         qc.refetchQueries({ queryKey: ["record", recordId] }),
         qc.refetchQueries({ queryKey: ["rows", recordId] }),
         qc.refetchQueries({ queryKey: ["cells", recordId] }),
         qc.refetchQueries({ queryKey: ["stats", recordId] }),
       ])
+      savedRef.current = {
+        label: "saved",
+        rows: qc.getQueryData(["rows", recordId]),
+        cells: qc.getQueryData(["cells", recordId]),
+        record: qc.getQueryData(["record", recordId]),
+      }
       header.set({ dirty: false } as any)
       try { localStorage.removeItem(`patty-dirty-${recordId}`) } catch { /* noop */ }
       setSaveState("saved")
@@ -823,13 +921,11 @@ export function Editor() {
   if (recError || rowsError) return <div className="flex-1 p-8 text-center text-sm text-[var(--text-dim)]">{t("common.loadError")} <button onClick={() => { recRefetch(); rowsRefetch() }} className="text-[var(--accent)] font-medium hover:underline ml-1">{t("common.retry")}</button></div>
   if (!record || !rows || recPending || rowsPending) return <div className="flex-1 p-8 space-y-3" aria-hidden><div className="h-8 w-64 rounded-lg bg-[var(--surface-2)] animate-pulse" /><div className="h-96 rounded-xl bg-[var(--surface-2)] animate-pulse" /><span className="sr-only">{t("editor.loading")}</span></div>
   const cellMap=new Map<string,any>(); cells?.forEach((c:any)=>cellMap.set(`${c.row_id}-${c.year}-${c.month}`,c))
-  const headerBg = settings.table_header_bg && settings.table_header_bg !== "#e0e7ff" ? settings.table_header_bg : ""
+  // Drafts always render Auto header (theme color): a custom header never leaks into new files
+  const headerBg = isDraft ? "" : (settings.table_header_bg && settings.table_header_bg !== "#e0e7ff" ? settings.table_header_bg : "")
   const years=Array.from({length: record.period_end - record.period_start + 1}, (_,i)=>record.period_start+i)
-  const monthSum = years.reduce((s: number, y: number) => s + MONTHS.reduce((a: number, _, mi: number) => a + (colWidths[monthKey(y, mi)] ?? 34), 0), 0)
-  const fixedSum = (colWidths.n ?? 44) + (colWidths.company ?? 160) + 54
-    + (settings.visible_fields.assignee ? (colWidths.assignee ?? 90) : 0)
-    + (settings.visible_fields.notes ? (colWidths.notes ?? 140) : 0)
-  const tableMinWidth = fixedSum + monthSum
+  const monthSum = years.reduce((s: number, y: number) => s + MONTHS.reduce((a: number, _, mi: number) => a + (colWidths[monthKey(y, mi)] ?? MONTH_DEFAULT), 0), 0)
+
   const staffOpts=Array.from({length: record.staff_count||2},(_,i)=>`P${i+1}`)
   const activePerson = Math.min(personIdx, Math.max(0, (record?.staff_count ?? 1) - 1))
   const ownerOf = (color: string | null | undefined) => PERSON_COLORS.indexOf(color ?? "")
@@ -937,8 +1033,8 @@ export function Editor() {
             </div>
             <span aria-hidden className="w-px h-5 bg-[var(--border)] mx-1 shrink-0" />
           </div>
-          <button onClick={saveAll} disabled={isMutating > 0 || saveState === "saving"} title={isDraft ? t("editor.draft.saveHint") : t("editor.toolbar.validateSave")} className={`flex items-center gap-1.5 rounded-full px-4 min-h-[44px] text-[12px] font-medium transition border shrink-0 ${!isDraft && saveState === "saved" ? "bg-[var(--accent-soft)] border-[var(--accent-border)] text-[var(--success)]" : isDraft ? "bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] border-transparent" : "bg-[var(--surface)] border-[var(--border)] text-[var(--text)] hover:text-[var(--text)] hover:border-[var(--accent-border)]"} disabled:opacity-50`}>
-              {saveState === "saved" && !isDraft ? <><Check size={13}/><span className="hidden min-[420px]:inline">{t("editor.toolbar.saved")}</span></> : saveState === "saving" ? t("editor.toolbar.saving") : <><Save size={13}/><span className="hidden min-[420px]:inline">{isDraft ? t("editor.draft.saveFile") : t("editor.toolbar.save")}</span></>}
+          <button onClick={saveAll} disabled={isMutating > 0 || saveState === "saving"} title={isDraft ? t("editor.draft.saveHint") : t("editor.toolbar.save")} className={`flex items-center gap-1.5 rounded-full px-4 min-h-[44px] text-[12px] font-medium transition border shrink-0 ${(isDraft || header.dirty) && saveState !== "saving" ? "bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] border-transparent" : saveState === "saved" ? "bg-[var(--accent-soft)] border-[var(--accent-border)] text-[var(--success)]" : "bg-[var(--surface)] border-[var(--border)] text-[var(--text)] hover:text-[var(--text)] hover:border-[var(--accent-border)]"} disabled:opacity-50`}>
+              {saveState === "saving" ? <><Save size={13}/><span>{t("editor.toolbar.saving")}</span></> : <>{saveState === "saved" && !header.dirty ? <Check size={13}/> : <Save size={13}/>}<span>{t("editor.toolbar.save")}</span></>}
           </button>
           <div ref={exportRef} className="relative shrink-0">
                           <button onClick={()=>setExportOpen(!exportOpen)} disabled={isDraft} title={isDraft ? t("editor.draft.exportHint") : t("editor.toolbar.export")} aria-haspopup="menu" aria-expanded={exportOpen} className="flex items-center gap-1.5 rounded-full px-4 min-h-[44px] text-[12px] font-medium bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] transition whitespace-nowrap disabled:opacity-50">
@@ -1009,8 +1105,9 @@ export function Editor() {
               </button>
             </>
           )}
-          <div style={{ width: sheetBase.w, minHeight: sheetBase.h }} className={`max-w-none mx-auto bg-white shadow-[0_20px_60px_rgba(0,0,0,0.45)] rounded-lg overflow-hidden transition-[box-shadow,opacity] duration-200 relative ${preview ? "z-50 ring-2 ring-[var(--accent-border)]" : ""}`}>
-            <div className="p-6 origin-top-left" style={{ transform: `scale(${zoom})`, width: `${100 / zoom}%` }}>
+          <div style={{ width: sheetBase.w * zoom, height: sheetH ? sheetH * zoom : undefined }} className="max-w-none mx-auto transition-[width] duration-200">
+          <div ref={sheetRef} style={{ width: sheetBase.w, minHeight: sheetBase.h, transform: `scale(${zoom})` }} className={`origin-top-left bg-white shadow-[0_20px_60px_rgba(0,0,0,0.45)] rounded-lg overflow-hidden transition-[box-shadow,opacity] duration-200 relative ${preview ? "z-50 ring-2 ring-[var(--accent-border)]" : ""}`}>
+            <div className="p-6">
               <div className="flex items-center gap-2 mb-3 text-xs">
                 {record.review_type ? <span className="px-2 py-1 rounded bg-[var(--sheet-soft)] border border-[var(--sheet-border)] text-[var(--sheet-ink)]">{record.review_type}</span> : null}
                 <span className="text-[var(--text-dim)]">{record.period_start} — {record.period_end} • {t("editor.rowsCount", { count: (rows as any)?.length ?? 0 })}</span>
@@ -1023,7 +1120,7 @@ export function Editor() {
                 </div>
               )}
               <div className={`overflow-auto ${preview ? "pointer-events-none select-none" : ""}`}>
-                <table className={`w-full text-xs border-collapse border border-[var(--sheet-border)] table-${settings.table_density}`} style={{ minWidth: tableMinWidth }} aria-readonly={preview || undefined}>
+                <table className={`text-xs border-collapse border border-[var(--sheet-border)] table-${settings.table_density} table-fixed`} style={{ width: "max-content" }} aria-readonly={preview || undefined}>
                   <thead>
                     <tr className="bg-[var(--sheet-soft)] border-y border-[var(--sheet-border)]" style={headerBg ? { background: headerBg } : undefined}>
                       <th rowSpan={2} style={{ ...colStyle("n"), ...guideShadowX("n"), ...guideShadowY(HEADER_KEY) }} className="p-2 w-[44px] text-left text-[var(--sheet-ink)] font-semibold align-middle border-x border-[var(--sheet-border)] relative">{t("editor.table.numberCol")}{!preview && <DragHandle axis="x" title={t("editor.resize.colWidth")} zoom={zoom} startV={colWidths.n ?? 44} min={28} onV={(w)=>resizeCol("n", w)} onReset={()=>resetCol("n")} {...guideProps("x", "n")} />}{!preview && <DragHandle axis="y" title={t("editor.resize.headerHeight")} zoom={zoom} startV={headerH ?? 44} min={40} onV={(h)=>resizeRow(HEADER_KEY, h)} onReset={()=>resetRow(HEADER_KEY)} {...guideProps("y", HEADER_KEY)} />}</th>
@@ -1034,7 +1131,7 @@ export function Editor() {
                     </tr>
                     <tr style={{ ...(headerBg ? { background: headerBg } : null), ...(headerH ? { height: headerH } : null) }} className="bg-[var(--sheet-soft)] border-b border-[var(--sheet-border)]">
                       {years.map((y, yi)=>(
-                        <th key={y} colSpan={12} style={guideBlock && yi === years.length - 1 ? guideShadowBlock : guideShadowY(HEADER_KEY) ?? undefined} className="p-0 text-center text-[var(--sheet-ink)] font-semibold text-[11px] border-x border-[var(--sheet-border)] relative"><div className="pt-1 pb-0.5 border-b border-[var(--sheet-border)] flex items-center justify-center gap-1">{y}{!preview && <button onClick={() => markYear(y, true)} onContextMenu={(e) => { e.preventDefault(); markYear(y, false) }} title={`${t("editor.table.markYear", { year: y })} · clic derecho: ${t("editor.table.unmarkYear", { year: y })}`} aria-label={t("editor.table.markYear", { year: y })} className="w-6 h-6 grid place-items-center rounded text-[10px] text-[var(--sheet-ink)]/60 hover:text-[var(--sheet-ink)] hover:bg-[var(--sheet-soft)]">✓</button>}</div><div className="flex items-stretch text-[10px] font-medium tracking-wide text-[var(--sheet-ink)]">{MONTHS.map((m, mi)=> {
+                        <th key={y} colSpan={12} style={{ width: yearWidth(y), ...(guideBlock && yi === years.length - 1 ? guideShadowBlock : guideShadowY(HEADER_KEY) ?? undefined) }} className="p-0 text-center text-[var(--sheet-ink)] font-semibold text-[11px] border-x border-[var(--sheet-border)] relative"><div className="pt-1 pb-0.5 border-b border-[var(--sheet-border)] flex items-center justify-center gap-1">{y}{!preview && <button onClick={() => markYear(y, true)} onContextMenu={(e) => { e.preventDefault(); markYear(y, false) }} title={`${t("editor.table.markYear", { year: y })} · clic derecho: ${t("editor.table.unmarkYear", { year: y })}`} aria-label={t("editor.table.markYear", { year: y })} className="w-6 h-6 grid place-items-center rounded text-[10px] text-[var(--sheet-ink)]/60 hover:text-[var(--sheet-ink)] hover:bg-[var(--sheet-soft)]">✓</button>}</div><div className="flex items-stretch text-[10px] font-medium tracking-wide text-[var(--sheet-ink)]">{MONTHS.map((m, mi)=> {
                           const mk = monthKey(y, mi)
                           return <span key={`${y}-${mi}-${m}`} style={{ ...monthStyle(mk), ...guideShadowX(mk), ...(guideRow(HEADER_KEY) ? { borderLeftColor: GUIDE } : null) }} className={`${monthClass(mk)} flex items-center justify-center ${mi === 0 ? "border-l-0" : "border-l border-[var(--sheet-border)]"}`}>{m}{!preview && <DragHandle axis="x" title={t("editor.resize.monthWidth")} zoom={zoom} startV={colWidths[mk] ?? 20} min={16} onV={(w)=>resizeCol(mk, w)} onReset={()=>resetCol(mk)} {...guideProps("x", mk)} />}</span>
                         })}</div>
@@ -1055,14 +1152,14 @@ export function Editor() {
                             {!preview && <DragHandle axis="y" title={t("editor.resize.rowHeight")} zoom={zoom} startV={rowHeights[row.id] ?? 33} min={28} onV={(h)=>resizeRow(row.id, h)} onReset={()=>resetRow(row.id)} {...guideProps("y", row.id)} />}
                           </td>
                           <td className="p-2 relative text-center border-x border-[var(--sheet-border)]" style={{ ...colStyle("company"), ...guideShadowX("company"), ...guideShadowY(row.id) }}>
-                            <button disabled={preview} onClick={()=>setPickRowId(pickRowId===row.id?null:row.id)} title={row.name_snapshot ? t("editor.table.changeCompany") : t("editor.table.chooseCompany")} aria-haspopup="listbox" aria-expanded={pickRowId===row.id} className={`rounded px-2 h-8 w-full text-xs flex items-center gap-1 border hover:border-[var(--sheet-border)] hover:bg-[var(--sheet-soft)] disabled:hover:border-transparent disabled:hover:bg-transparent disabled:cursor-default ${row.name_snapshot ? "font-medium text-[#1e293b] border-transparent" : "border-dashed border-[var(--sheet-border)] text-[var(--text-dim)]"}`}>
-                              <span className="flex-1 text-left truncate">{row.name_snapshot || `${t("editor.table.chooseCompany")} ▾`}</span>
-                              <span className="text-[10px] ml-auto text-[var(--text-dim)]">▾</span>
+                            <button ref={(el)=>{ if (row.id===pickRowId) pickBtnRef.current = el }} disabled={preview} onClick={()=>setPickRowId(pickRowId===row.id?null:row.id)} title={row.name_snapshot ? t("editor.table.changeCompany") : t("editor.table.chooseCompany")} aria-haspopup="listbox" aria-expanded={pickRowId===row.id} className={`rounded px-2 h-8 w-full text-xs flex items-center gap-1 border hover:border-[var(--sheet-border)] hover:bg-[var(--sheet-soft)] disabled:hover:border-transparent disabled:hover:bg-transparent disabled:cursor-default ${row.name_snapshot ? "font-medium text-[#1e293b] border-transparent" : "border-dashed border-[var(--sheet-border)] text-[var(--text-dim)]"}`}>
+                              <span className="flex-1 text-left truncate">{row.name_snapshot || t("editor.table.chooseCompany")}</span>
+                              <span aria-hidden className="text-[10px] ml-auto text-[var(--text-dim)]">▾</span>
                             </button>
-                            {pickRowId===row.id && companies && <CompanyPicker row={row} companies={companies} onClose={()=>setPickRowId(null)} onSelect={async(v)=>{ await updateRow.mutateAsync({ rowId: row.id, patch: v as any }); setPickRowId(null) }} />}
+                            {pickRowId===row.id && companies && <CompanyPicker row={row} companies={companies} anchorRef={pickBtnRef} onClose={()=>setPickRowId(null)} onSelect={async(v)=>{ await updateRow.mutateAsync({ rowId: row.id, patch: v as any }); setPickRowId(null) }} />}
                           </td>
                           {years.map((y, yi)=>(
-                            <td key={y} colSpan={12} className="p-0 border-x border-[var(--sheet-border)]" style={guideBlock && yi === years.length - 1 ? guideShadowBlock : guideShadowY(row.id) ?? undefined}>
+                            <td key={y} colSpan={12} className="p-0 border-x border-[var(--sheet-border)]" style={{ width: yearWidth(y), ...(guideBlock && yi === years.length - 1 ? guideShadowBlock : guideShadowY(row.id) ?? undefined) }}>
                               <div className="flex items-stretch h-full">
                                 {MONTHS.map((_, mi)=>{
                                   const c = cellMap.get(`${row.id}-${y}-${mi+1}`)
@@ -1101,6 +1198,7 @@ export function Editor() {
               </div>
               )}
             </div>
+          </div>
           </div>
         </div>
       </div>

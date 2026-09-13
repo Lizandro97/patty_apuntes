@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import { useSettingsStore } from "./settings"
 
 export type ThemeName = "papel" | "tinta" | "menta"
 
@@ -39,5 +40,7 @@ export const useThemeStore = create<ThemeState>((set) => ({
   setTheme: (t) => {
     applyTheme(t)
     set({ theme: t })
+    // Re-resolve derived vars (sheet accent follows theme accent when in Auto)
+    try { useSettingsStore.getState().applyCss() } catch { /* noop */ }
   },
 }))
