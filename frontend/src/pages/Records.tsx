@@ -4,8 +4,9 @@ import { api } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useNavigate } from "react-router-dom"
-import { useEffect, useState } from "react"
-import { Plus, Download, Trash2, Search, Pencil, X } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
+import { Plus, Download, Trash2, Search, Pencil, X, ChevronDown } from "lucide-react"
 import { defaultTitle, newRecordPayload } from "@/lib/defaults"
 import { useToast } from "@/lib/toast"
 import { downloadBlob, exportFilename } from "@/lib/filenames"
@@ -23,6 +24,31 @@ export function Records() {
   const [renameTitle,setRenameTitle]=useState("")
   const [dlRec,setDlRec]=useState<any|null>(null)
   const [delRec,setDelRec]=useState<any|null>(null)
+  const [sortOpen,setSortOpen]=useState(false)
+  const [sortPos,setSortPos]=useState<{top:number;left:number;width:number}|null>(null)
+  const sortBtnRef=useRef<HTMLButtonElement|null>(null)
+  const sortLabel=(v:string)=> v==="progress" ? t("records.sortProgress") : v==="title" ? t("records.sortTitle") : t("records.sortRecent")
+  const openSort=()=>{
+    const r=sortBtnRef.current?.getBoundingClientRect()
+    if(r) setSortPos({ top: r.bottom+6, left: Math.max(8, r.right-r.width), width: Math.max(120, r.width) })
+    setSortOpen(true)
+  }
+  const closeSort=(refocus=false)=>{
+    setSortOpen(false)
+    setSortPos(null)
+    if(refocus) sortBtnRef.current?.focus()
+  }
+  useEffect(() => {
+    if (!sortOpen) return
+    const onDown=(e:MouseEvent)=>{ if(!(e.target as HTMLElement).closest?.("[data-sortmenu]") && !(sortBtnRef.current && sortBtnRef.current.contains(e.target as Node))) closeSort() }
+    const onKey=(e:KeyboardEvent)=>{ if(e.key==="Escape") closeSort(true) }
+    const onScroll=()=>closeSort()
+    document.addEventListener("mousedown", onDown)
+    document.addEventListener("keydown", onKey)
+    window.addEventListener("scroll", onScroll, true)
+    window.addEventListener("resize", onScroll)
+    return ()=>{ document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); window.removeEventListener("scroll", onScroll, true); window.removeEventListener("resize", onScroll) }
+  }, [sortOpen])
   useEffect(() => {
     if (!dlRec && !delRec && !renameRec) return
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") { setDlRec(null); setDelRec(null); setRenameRec(null) } }
@@ -83,11 +109,18 @@ export function Records() {
               <input id="records-search" aria-label={t("records.searchLabel")} placeholder={t("records.searchPlaceholder")} value={q} onChange={e=>setQ(e.target.value)} className="w-full h-full bg-transparent text-[var(--text)] placeholder:text-[var(--text-dim)] text-sm pl-9 pr-2 focus:outline-none" />
             </div>
             <span aria-hidden className="w-px self-stretch my-2 bg-[var(--border)] shrink-0" />
-            <select aria-label={t("records.sortLabel")} title={t("records.sortLabel")} value={sort} onChange={e=>setSort(e.target.value as any)} className="shrink-0 h-full bg-transparent text-[var(--text-dim)] text-xs font-medium pl-2 pr-1 focus:outline-none focus:text-[var(--text)] cursor-pointer">
-              <option value="date">{t("records.sortRecent")}</option>
-              <option value="progress">{t("records.sortProgress")}</option>
-              <option value="title">{t("records.sortTitle")}</option>
-            </select>
+            <button
+              ref={sortBtnRef}
+              onClick={()=>sortOpen ? closeSort(true) : openSort()}
+              title={t("records.sortLabel")}
+              aria-label={`${t("records.sortLabel")}: ${sortLabel(sort)}`}
+              aria-haspopup="menu"
+              aria-expanded={sortOpen}
+              className="shrink-0 h-full min-w-[44px] flex items-center gap-1 text-[var(--text)] text-xs font-medium pl-2 pr-2 hover:text-[var(--accent)] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] cursor-pointer"
+            >
+              {sortLabel(sort)}
+              <ChevronDown size={14} className={`text-[var(--text-dim)] shrink-0 transition-transform ${sortOpen ? "rotate-180" : ""}`} />
+            </button>
           </div>
         </div>
         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl overflow-hidden">
@@ -184,6 +217,23 @@ export function Records() {
           </div>
         </div>
       </div>
+    )}
+    {sortOpen && sortPos && createPortal(
+      <div data-sortmenu role="menu" aria-label={t("records.sortLabel")} style={{ position: "fixed", top: sortPos.top, left: sortPos.left, width: sortPos.width, zIndex: 70 }} className="bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.35)] p-1.5">
+        {(["date", "progress", "title"] as const).map(v => (
+          <button
+            key={v}
+            role="menuitemradio"
+            aria-checked={sort===v}
+            onClick={()=>{ setSort(v); closeSort(true) }}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs text-[var(--text)] hover:bg-[var(--surface-2)] transition"
+          >
+            {sortLabel(v)}
+            <span className="ml-auto text-[var(--accent)] text-xs">{sort===v ? "✓" : ""}</span>
+          </button>
+        ))}
+      </div>,
+      document.body
     )}
   </>
   )

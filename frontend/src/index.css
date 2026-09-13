@@ -4,6 +4,7 @@
 @tailwind utilities;
 
 :root, :root[data-theme="papel"] {
+  color-scheme: light;
   --primary: #2B3FE0;
   --grid-cols: 3;
   --bg: #F4F2EC;
@@ -25,6 +26,7 @@
 }
 
 :root[data-theme="tinta"] {
+  color-scheme: dark;
   --primary: #C9A227;
   --bg: #0B1220;
   --surface: #101A30;
@@ -45,6 +47,7 @@
 }
 
 :root[data-theme="menta"] {
+  color-scheme: light;
   --primary: #0E7C5B;
   --bg: #EDF1EF;
   --surface: #FFFFFF;
