@@ -26,7 +26,7 @@ export const PERSON_COLORS = [
 // Floating overlay: portal to body + fixed position so dropdowns float above
 // the scrollable sheet instead of being clipped by it. Anchored to the trigger,
 // flips up when there is no room below, clamps to the viewport, follows scroll.
-function useFloatPos(anchor: React.RefObject<HTMLElement | null>, open: boolean, w: number, estH = 320) {
+function useFloatPos(anchor: React.RefObject<HTMLElement | null>, open: boolean, w: number, menuRef?: React.RefObject<HTMLElement | null>, estH = 320, align: "left" | "right" = "left") {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
   useLayoutEffect(() => {
     if (!open) { setPos(null); return }
@@ -35,16 +35,21 @@ function useFloatPos(anchor: React.RefObject<HTMLElement | null>, open: boolean,
       if (!el) return
       const r = el.getBoundingClientRect()
       const vw = window.innerWidth, vh = window.innerHeight
-      const left = Math.max(8, Math.min(r.left, vw - w - 8))
+      // Real menu height when mounted; falls back to the estimate on first paint
+      const h = menuRef?.current?.offsetHeight || estH
+      const wantLeft = align === "right" ? r.right - w : r.left
+      const left = Math.max(8, Math.min(wantLeft, vw - w - 8))
       const below = r.bottom + 8
-      const top = below + estH <= vh ? below : Math.max(8, r.top - estH - 8)
+      const top = below + h + 8 <= vh ? below : Math.max(8, r.top - h - 8)
       setPos({ top, left })
     }
     place()
+    // Re-place once mounted so the measured (not estimated) height applies
+    const raf = requestAnimationFrame(place)
     window.addEventListener("scroll", place, true)
     window.addEventListener("resize", place)
-    return () => { window.removeEventListener("scroll", place, true); window.removeEventListener("resize", place) }
-  }, [open, anchor, w, estH])
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("scroll", place, true); window.removeEventListener("resize", place) }
+  }, [open, anchor, w, menuRef, estH, align])
   return pos
 }
 
@@ -52,7 +57,7 @@ function CompanyPicker({ row, companies, anchorRef, onSelect, onClose }: { row: 
   const { t } = useTranslation()
   const [q, setQ] = useState("")
   const ref = useRef<HTMLDivElement>(null)
-  const pos = useFloatPos(anchorRef, true, 280, 300)
+  const pos = useFloatPos(anchorRef, true, 280, ref, 300)
   useEffect(() => {
     const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose() }
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose() }
@@ -84,7 +89,7 @@ function RowMenu({ row, idx, total, onMove, onDelete, onMarkRow }: { row: any; i
   const [confirming, setConfirming] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const trigRef = useRef<HTMLButtonElement>(null)
-  const menuPos = useFloatPos(trigRef, open, 190, 320)
+  const menuPos = useFloatPos(trigRef, open, 190, ref, 320)
   useEffect(() => {
     if (!open) return
     const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node) && !(trigRef.current && trigRef.current.contains(e.target as Node))) { setOpen(false); setConfirming(false) } }
@@ -102,8 +107,8 @@ function RowMenu({ row, idx, total, onMove, onDelete, onMarkRow }: { row: any; i
         aria-label={t("editor.table.rowOptions")}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex w-7 h-7 items-center justify-center rounded-lg text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--sheet-soft)] border border-transparent hover:border-[var(--sheet-border)] transition-opacity cursor-pointer md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 focus-visible:opacity-100"
-      >⋯</button>
+        className="relative block w-7 h-7 cursor-pointer bg-transparent transition-opacity opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 focus-visible:opacity-100 max-md:opacity-100"
+      ><span aria-hidden className="absolute bottom-[3px] right-[3px] border-b-[10px] border-b-[var(--sheet-accent)] border-l-[10px] border-l-transparent opacity-80 hover:opacity-100 hover:brightness-125 transition" /></button>
       {open && createPortal(
         <div ref={ref} style={{ position: "fixed", top: menuPos?.top ?? -9999, left: menuPos?.left ?? 8, width: 190, zIndex: 70, visibility: menuPos ? "visible" : "hidden" }} className="bg-white border border-[var(--sheet-border)] rounded-xl shadow-[0_12px_32px_rgba(132,24,67,0.15)] p-1.5 text-left">
           {!confirming ? (
@@ -681,7 +686,7 @@ export function Editor() {
         if (k === "z" && !e.shiftKey) { e.preventDefault(); doUndo() }
         else if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); doRedo() }
         else if (k === "s") { e.preventDefault(); saveAll() }
-        else if (k === "e" && !isDraft) { e.preventDefault(); setExportOpen((v) => !v) }
+        else if (k === "e") { e.preventDefault(); setExportOpen((v) => !v) }
         else if (k === "p") { e.preventDefault(); setPreview((v) => !v) }
       } else if (e.key >= "1" && e.key <= "9" && !e.ctrlKey && !e.metaKey && !e.altKey) {
         const target = e.target as HTMLElement | null
@@ -778,15 +783,21 @@ export function Editor() {
   const [validAlert, setValidAlert] = useState<any[] | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
   const exportRef = useRef<HTMLDivElement>(null)
+  const exportBtnRef = useRef<HTMLButtonElement>(null)
+  const exportMenuRef = useRef<HTMLDivElement>(null)
+  const exportPos = useFloatPos(exportBtnRef, exportOpen, 150, exportMenuRef, 120, "right")
   const [moreOpen, setMoreOpen] = useState(false)
   const moreRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!exportOpen) return
     const h = (e: MouseEvent) => { if (exportRef.current && !exportRef.current.contains(e.target as Node)) setExportOpen(false) }
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") setExportOpen(false) }
+    const s = () => setExportOpen(false)
     document.addEventListener("mousedown", h)
     document.addEventListener("keydown", k)
-    return () => { document.removeEventListener("mousedown", h); document.removeEventListener("keydown", k) }
+    window.addEventListener("scroll", s, true)
+    window.addEventListener("resize", s)
+    return () => { document.removeEventListener("mousedown", h); document.removeEventListener("keydown", k); window.removeEventListener("scroll", s, true); window.removeEventListener("resize", s) }
   }, [exportOpen])
   useEffect(() => {
     if (!moreOpen) return
@@ -804,15 +815,17 @@ export function Editor() {
   const isPristineRow = (f: any, cellList: any[]) =>
     !f.company_id && !(f.name_snapshot ?? "").trim() && !(f.assignee ?? "").trim() && !(f.note ?? "").trim() &&
     !cellList.some((c: any) => c.row_id === f.id && (c.reviewed || c.color))
-  // Draft Guardar: persists the whole sheet in one chain, then lands on /editor/:id.
+  // Draft persist: creates the whole sheet on the server in one chain.
+  // Returns the new record id, or null when validation stopped the flow.
+  // Throws on network/server failure (caller reports with its own retry).
   // Pristine seeded rows are skipped (backend regenerates defaults on open).
-  const saveDraft = async () => {
+  const persistDraft = async (): Promise<{ id: string; title: string } | null> => {
     const title = ((record as any)?.title ?? "").trim()
-    if (!title) { push({ kind: "error", title: t("editor.draft.titleRequired") }); return }
+    if (!title) { push({ kind: "error", title: t("editor.draft.titleRequired") }); return null }
     const draftCells = ((qc.getQueryData(["cells", recordId]) as any[]) ?? [])
     const savable = orderedRows.filter((f: any) => !isPristineRow(f, draftCells))
     const miss = savable.filter((f: any) => !f.company_id).map((f: any) => ({ row: orderedRows.indexOf(f) + 1, id: f.id, field: "company", name: f.name_snapshot }))
-    if (miss.length) { setValidAlert(miss); return }
+    if (miss.length) { setValidAlert(miss); return null }
     setSaveState("saving")
     try {
       const rec = (await api.post("/records", {
@@ -832,6 +845,13 @@ export function Editor() {
         if (f.note) patch.note = f.note
         if (Object.keys(patch).length) await api.put(`/records/${rec.id}/rows/${created.id}`, patch)
       }
+      // The backend seeds 5 empty rows on record creation: drop the pristine ones
+      // so the file keeps exactly the rows the user saved (created rows all
+      // carry a company, enforced above, so only backend defaults match).
+      const created = (await api.get(`/records/${rec.id}/rows`)).data as any[]
+      await Promise.all(created.filter((r: any) =>
+        !r.company_id && !(r.name_snapshot ?? "").trim() && !(r.assignee ?? "").trim() && !(r.note ?? "").trim()
+      ).map((r: any) => api.delete(`/records/${rec.id}/rows/${r.id}`).catch(() => null)))
       const fresh = (await api.get(`/records/${rec.id}/cells`)).data as any[]
       const freshByKey = new Map(fresh.map((c: any) => [`${c.row_id}-${c.year}-${c.month}`, c]))
       const groups = new Map<string, { reviewed: boolean; color: string; keys: string[] }>()
@@ -855,13 +875,53 @@ export function Editor() {
       }
       try { localStorage.removeItem(`patty-dirty-undefined`) } catch { /* noop */ }
       qc.invalidateQueries({ queryKey: ["records"] })
+      return { id: rec.id, title }
+    } catch (e) {
+      setSaveState("idle")
+      throw e
+    }
+  }
+  const saveDraft = async () => {
+    try {
+      const r = await persistDraft()
+      if (!r) return
       setSaveState("saved")
       push({ kind: "success", title: t("common.savedOk") })
-      navigate(`/editor/${rec.id}`, { replace: true })
+      navigate(`/editor/${r.id}`, { replace: true })
     } catch {
       setSaveState("idle")
       push({ kind: "error", title: t("common.saveError"), actionLabel: t("common.retry"), onAction: () => saveDraft() })
     }
+  }
+  const downloadSaved = async (id: string, title: string, fmt: "pdf" | "excel") => {
+    try {
+      const res = await api.get(`/records/${id}/export?format=${fmt}&lang=${i18n.language}`, { responseType: "blob" })
+      downloadBlob(res.data, exportFilename(title, fmt === "pdf" ? "pdf" : "xlsx"))
+      push({ kind: "success", title: t("common.exportOk") })
+    } catch {
+      push({ kind: "error", title: t("common.exportError"), actionLabel: t("common.retry"), onAction: () => downloadSaved(id, title, fmt) })
+    }
+  }
+  // Draft export: save first (same validations), then download, then land on the file
+  const draftExport = async (fmt: "pdf" | "excel") => {
+    const draftCells = ((qc.getQueryData(["cells", recordId]) as any[]) ?? [])
+    const savable = orderedRows.filter((f: any) => !isPristineRow(f, draftCells))
+    if (!savable.length && orderedRows.length) {
+      setValidAlert(orderedRows.map((f: any, i: number) => ({ row: i + 1, id: f.id, field: "company", name: f.name_snapshot })))
+      return
+    }
+    let r: { id: string; title: string } | null
+    try {
+      r = await persistDraft()
+      if (!r) return
+    } catch {
+      setSaveState("idle")
+      push({ kind: "error", title: t("common.saveError"), actionLabel: t("common.retry"), onAction: () => draftExport(fmt) })
+      return
+    }
+    await downloadSaved(r.id, r.title, fmt)
+    setSaveState("idle")
+    navigate(`/editor/${r.id}`, { replace: true })
   }
   const saveAll = async () => {
     if (isDraft) { await saveDraft(); return }
@@ -1037,14 +1097,15 @@ export function Editor() {
               {saveState === "saving" ? <><Save size={13}/><span>{t("editor.toolbar.saving")}</span></> : <>{saveState === "saved" && !header.dirty ? <Check size={13}/> : <Save size={13}/>}<span>{t("editor.toolbar.save")}</span></>}
           </button>
           <div ref={exportRef} className="relative shrink-0">
-                          <button onClick={()=>setExportOpen(!exportOpen)} disabled={isDraft} title={isDraft ? t("editor.draft.exportHint") : t("editor.toolbar.export")} aria-haspopup="menu" aria-expanded={exportOpen} className="flex items-center gap-1.5 rounded-full px-4 min-h-[44px] text-[12px] font-medium bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] transition whitespace-nowrap disabled:opacity-50">
+                          <button ref={exportBtnRef} onClick={()=>setExportOpen(!exportOpen)} title={t("editor.toolbar.export")} aria-haspopup="menu" aria-expanded={exportOpen} className="flex items-center gap-1.5 rounded-full px-4 min-h-[44px] text-[12px] font-medium bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] transition whitespace-nowrap disabled:opacity-50">
               <Download size={13}/><span className="hidden min-[420px]:inline">{t("editor.toolbar.export")}</span> <span className="text-[10px]">▾</span>
             </button>
-            {exportOpen && (
-              <div role="menu" className="absolute right-0 top-full mt-1 w-[150px] bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-xl p-1.5 z-30">
-                  <button role="menuitem" onClick={()=>{ setExportOpen(false); exportFile("pdf") }} className="w-full text-left px-3 py-2 rounded-lg text-xs text-[var(--text)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]">{t("editor.toolbar.downloadPdf")}</button>
-                  <button role="menuitem" onClick={()=>{ setExportOpen(false); exportFile("excel") }} className="w-full text-left px-3 py-2 rounded-lg text-xs text-[var(--text)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]">{t("editor.toolbar.downloadExcel")}</button>
-              </div>
+            {exportOpen && exportPos && createPortal(
+              <div ref={exportMenuRef} role="menu" aria-label={t("editor.toolbar.export")} style={{ position: "fixed", top: exportPos.top, left: exportPos.left, width: 150, zIndex: 70 }} className="bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-xl p-1.5">
+                  <button role="menuitem" onClick={()=>{ setExportOpen(false); (isDraft ? draftExport : exportFile)("pdf") }} className="w-full text-left px-3 py-2 rounded-lg text-xs text-[var(--text)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]">{t("editor.toolbar.downloadPdf")}</button>
+                  <button role="menuitem" onClick={()=>{ setExportOpen(false); (isDraft ? draftExport : exportFile)("excel") }} className="w-full text-left px-3 py-2 rounded-lg text-xs text-[var(--text)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]">{t("editor.toolbar.downloadExcel")}</button>
+              </div>,
+              document.body
             )}
           </div>
           <button onClick={()=>setMPanel(true)} title={t("editor.panel.label")} aria-label={t("editor.panel.label")} className="lg:hidden w-10 h-10 shrink-0 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface)] border border-transparent hover:border-[var(--border)] transition">
@@ -1194,7 +1255,7 @@ export function Editor() {
               </div>
               {!preview && (
               <div className="p-3 border-t border-[var(--sheet-border)]">
-                <Button onClick={()=>addRow.mutate({name: t("editor.table.defaultRowName", { n: rows.length + 1 }) })} className="w-full h-8 rounded-lg border border-dashed border-[var(--sheet-border)] bg-[var(--sheet-soft)] hover:brightness-95 text-[var(--sheet-accent)] text-xs font-medium gap-1.5"><Plus size={13}/> {t("editor.table.addRow")}</Button>
+                <Button onClick={()=>addRow.mutate({})} className="w-full h-8 rounded-lg border border-dashed border-[var(--sheet-border)] bg-[var(--sheet-soft)] hover:brightness-95 text-[var(--sheet-accent)] text-xs font-medium gap-1.5"><Plus size={13}/> {t("editor.table.addRow")}</Button>
               </div>
               )}
             </div>

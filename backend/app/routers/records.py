@@ -410,12 +410,13 @@ def create_row(
         if not company:
             raise HTTPException(404, {"code": "COMPANY_NOT_FOUND", "message": "Company not found"})
         name = company.name
-    elif data.name:
+    elif data.name and data.name.strip():
         name = data.name.strip()
     else:
-        raise HTTPException(
-            400, {"code": "COMPANY_OR_NAME_REQUIRED", "message": "Must send company_id or name"}
-        )
+        # empty rows allowed (same as _ensure_rows defaults): they render the
+        # "pick company" hint and are blocked by validation on save/export
+        name = ""
+        company_id = None
     max_position = (
         db.query(func.max(RecordRow.position)).filter(RecordRow.record_id == record_id).scalar()
     )
