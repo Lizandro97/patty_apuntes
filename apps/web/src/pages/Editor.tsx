@@ -1,5 +1,4 @@
-import { useQuery, useMutation, useQueryClient, useIsMutating } from "@tanstack/react-query"
-import { apiError } from "@/lib/errors"
+import { useQueryClient, useIsMutating } from "@tanstack/react-query"
 import { useNavigate, useParams } from "react-router-dom"
 import { useEffect, useState, useRef } from "react"
 import { createPortal } from "react-dom"
@@ -22,7 +21,6 @@ import { useEditorData } from "@/features/editor/useEditorData"
 import { useEditorMutations } from "@/features/editor/useEditorMutations"
 import {
   applySnapshot as applySnapshotToCache,
-  companyNameOf as companyNameOfIn,
   draftApplyRecord as draftApplyRecordToCache,
   draftApplyRow as draftApplyRowToCache,
   draftApplyRowPatch as draftApplyRowPatchToCache,
@@ -35,6 +33,13 @@ import { queryKeys } from "@/shared/queryKeys"
 const ZOOM_STEPS = [0.5, 0.6, 0.75, 1, 1.25, 1.5]
 const defaultZoom = () => 1
 const monthKey = (y: number, mi: number) => `m:${y}:${mi + 1}`
+// Puras sin scope del componente: fuera para no recrearlas en cada render.
+const monthClass = (_key: string) => `flex-none text-center relative`
+const ownerOf = (color: string | null | undefined) => PERSON_COLORS.indexOf(color ?? "")
+// A seeded empty row carries nothing to persist (no company/name/marks/text)
+const isPristineRow = (f: any, cellList: any[]) =>
+  !f.company_id && !(f.name_snapshot ?? "").trim() && !(f.assignee ?? "").trim() && !(f.note ?? "").trim() &&
+  !cellList.some((c: any) => c.row_id === f.id && (c.reviewed || c.color))
 
 export function Editor() {
   const { t } = useTranslation()
@@ -165,7 +170,6 @@ export function Editor() {
     const w = colWidths[key] ?? COL_DEFAULTS[key] ?? 0
     return (w ? { width: w, minWidth: w, maxWidth: w } : undefined) as any
   }
-  const monthClass = (_key: string) => `flex-none text-center relative`
   const monthStyle = (key: string) => ({ width: colWidths[key] ?? MONTH_DEFAULT }) as any
   const yearWidth = (y: number) => MONTHS.reduce((a: number, _, mi: number) => a + (colWidths[monthKey(y, mi)] ?? MONTH_DEFAULT), 0)
   const resizeCol = (key: string, w: number) =>
@@ -379,7 +383,6 @@ export function Editor() {
     return () => document.removeEventListener("keydown", h)
   }, [preview, selCell, recordId, rows, cells, record])
   // Draft: operaciones sobre cache local (implementación en features/editor/draft).
-  const companyNameOf = (companyId?: string) => companyNameOfIn(companies, companyId)
   const draftApplyRow = (p: any) => draftApplyRowToCache(qc, recordId, companies, p)
   const draftApplyRowPatch = (rowId: string, patch: any) =>
     draftApplyRowPatchToCache(qc, recordId, companies, rowId, patch)
@@ -425,10 +428,6 @@ export function Editor() {
   // required for save/export: every row needs a registered company (months can be filled freely)
   // Regla compartida con backend/movil: packages/validation (mismo codigo, mismos vectores).
   const missingCompany = () => findRowsMissingCompany(orderedRows)
-  // A seeded empty row carries nothing to persist (no company/name/marks/text)
-  const isPristineRow = (f: any, cellList: any[]) =>
-    !f.company_id && !(f.name_snapshot ?? "").trim() && !(f.assignee ?? "").trim() && !(f.note ?? "").trim() &&
-    !cellList.some((c: any) => c.row_id === f.id && (c.reviewed || c.color))
   // Draft persist: creates the whole sheet on the server in one chain.
   // Returns the new record id, or null when validation stopped the flow.
   // Throws on network/server failure (caller reports with its own retry).
@@ -508,13 +507,13 @@ export function Editor() {
       push({ kind: "error", title: t("common.saveError"), actionLabel: t("common.retry"), onAction: () => saveDraft() })
     }
   }
-  const downloadSaved = async (id: string, title: string, fmt: "pdf" | "excel") => {
+  const downloadSaved = async (fileId: string, title: string, fmt: "pdf" | "excel") => {
     try {
-      const blob = await editorApi.exportBlob(id, fmt, i18n.language)
+      const blob = await editorApi.exportBlob(fileId, fmt, i18n.language)
       downloadBlob(blob, exportFilename(title, fmt === "pdf" ? "pdf" : "xlsx"))
       push({ kind: "success", title: t("common.exportOk") })
     } catch {
-      push({ kind: "error", title: t("common.exportError"), actionLabel: t("common.retry"), onAction: () => downloadSaved(id, title, fmt) })
+      push({ kind: "error", title: t("common.exportError"), actionLabel: t("common.retry"), onAction: () => downloadSaved(fileId, title, fmt) })
     }
   }
   // Draft export: save first (same validations), then download, then land on the file
@@ -602,7 +601,6 @@ export function Editor() {
   const monthSum = years.reduce((s: number, y: number) => s + MONTHS.reduce((a: number, _, mi: number) => a + (colWidths[monthKey(y, mi)] ?? MONTH_DEFAULT), 0), 0)
 
   const staffOpts = Array.from({length: record.staff_count||2},(_,i)=>personName(staffNames, i))
-  const ownerOf = (color: string | null | undefined) => PERSON_COLORS.indexOf(color ?? "")
   const cellList: any[] = (cells as any[]) ?? []
   const selectedCell = selCell ? cellList.find((c: any) => c.row_id === selCell.rowId && c.year === selCell.year && c.month === selCell.month) : undefined
   const selectedRowName = selCell ? ((orderedRows.find((f: any) => f.id === selCell.rowId) as any)?.name_snapshot ?? "") : ""

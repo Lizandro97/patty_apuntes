@@ -7,6 +7,16 @@
     "perf": "warn"
   },
   "rules": {
-    "no-unused-vars": "error"
+    "no-unused-vars": "error",
+    "no-shadow": "error",
+    // Falsos positivos justificados en este código (ver docs/refactor.md):
+    // - no-map-spread: el spread en .map() es inmutabilidad intencional para React Query.
+    // - no-await-in-loop: los await secuenciales preservan orden fila→celda y ritmo del servidor.
+    // - no-array-sort: todos los .sort() operan sobre copias (.slice() o arrays nuevos).
+    "oxc/no-map-spread": "off",
+    "eslint/no-await-in-loop": "off",
+    "unicorn/no-array-sort": "off",
+    // Helpers puros junto a su uso: legibilidad > micro-opt de recrear por render.
+    "unicorn/consistent-function-scoping": "off"
   }
 }

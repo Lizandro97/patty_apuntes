@@ -35,6 +35,11 @@ Robin Wieruch feature-architecture, Vercel microfrontends verticales
   queda como alias legacy oculto.
 - CI (`.github/workflows/ci.yml`): backend ruff+pytest, packages bun test,
   web oxlint+bun test+build.
+- oxlint en verde total (0 errores, 0 warnings): `no-unused-vars` y
+  `no-shadow` como error; `no-map-spread`, `no-await-in-loop`,
+  `no-array-sort` y `consistent-function-scoping` en `off` justificado
+  en `.oxlintrc.json` (falsos positivos: inmutabilidad intencional,
+  awaits secuenciales con orden, sorts sobre copias).
 
 ## Deuda conocida (no bloqueante)
 

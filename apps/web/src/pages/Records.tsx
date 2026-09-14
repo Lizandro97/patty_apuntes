@@ -1,6 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
-import { api } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useNavigate } from "react-router-dom"
@@ -68,7 +67,7 @@ export function Records() {
   const safePage = Math.min(page, pages - 1)
   const list = filtered.slice(safePage * PAGE, safePage * PAGE + PAGE)
   const create = useMutation({ mutationFn: async()=> recordsApi.create({...newRecordPayload(), title: title || defaultTitle()}), onSuccess:(d)=> { qc.invalidateQueries({queryKey: queryKeys.records}); setTitle(""); nav(`/editor/${d.id}`) } })
-  const rename = useMutation({ mutationFn: ({id,title}:{id:string;title:string})=> recordsApi.rename(id, title), onSuccess:()=> { qc.invalidateQueries({queryKey: queryKeys.records}); setRenameRec(null) }, onError:()=> { push({ kind: "error", title: t("common.saveError"), actionLabel: t("common.retry"), onAction: ()=>renameTitle.trim() && renameRec && rename.mutate({id: renameRec.id, title: renameTitle.trim()}) }) } })
+  const rename = useMutation({ mutationFn: ({id,title: newTitle}:{id:string;title:string})=> recordsApi.rename(id, newTitle), onSuccess:()=> { qc.invalidateQueries({queryKey: queryKeys.records}); setRenameRec(null) }, onError:()=> { push({ kind: "error", title: t("common.saveError"), actionLabel: t("common.retry"), onAction: ()=>renameTitle.trim() && renameRec && rename.mutate({id: renameRec.id, title: renameTitle.trim()}) }) } })
   const del = useMutation({ mutationFn: (id:string)=> recordsApi.remove(id), onSuccess:()=> qc.invalidateQueries({queryKey: queryKeys.records}) })
   const fmtUpdated = (d?: string) => d ? fmtDate(d, i18n.language) : t("records.notUpdated")
   const download = async (rec: RecordItem, fmt:"pdf"|"excel") => {
