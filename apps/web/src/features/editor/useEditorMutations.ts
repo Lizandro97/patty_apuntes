@@ -1,8 +1,8 @@
-/** Editor writes (Cut 3): the 9 mutations + mutErr.
+/** Editor writes: the 9 mutations + mutErr.
  *
- *  Verbatim move from pages/Editor.tsx — same optimistic updates,
- *  same invalidates, same mutErr. Page dependencies come in
- *  as parameters so the hook never couples to the page.
+ *  Same optimistic updates, same invalidates, same mutErr.
+ *  Page dependencies come in as parameters so the hook never
+ *  couples to the page.
  */
 import { useMutation, type QueryClient } from "@tanstack/react-query"
 import { apiError } from "@/lib/errors"

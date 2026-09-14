@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Non-destructive startup (Fase 0): creates missing tables, keeps rows.
-    # Schema migrations: Alembic from Fase 2 (+ light ALTERs in init_db).
+    # Non-destructive startup: creates missing tables, keeps rows.
+    # Schema migrations: Alembic (+ light ALTERs in init_db).
     init_db()
     yield
 

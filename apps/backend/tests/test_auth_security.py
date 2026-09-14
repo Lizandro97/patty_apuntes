@@ -1,4 +1,4 @@
-"""Fase 4: JWT refresh, login rate-limit, single-use pairing, device revoke."""
+"""JWT refresh, login rate-limit, single-use pairing, device revoke."""
 
 from tests.conftest import auth_headers, client
 

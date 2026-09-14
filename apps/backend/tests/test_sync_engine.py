@@ -1,4 +1,4 @@
-"""Fase 2: idempotent push/pull, tombstones, deterministic LWW, tolerated abort."""
+"""Idempotent push/pull, tombstones, deterministic LWW, tolerated abort."""
 
 from datetime import UTC, datetime, timedelta
 

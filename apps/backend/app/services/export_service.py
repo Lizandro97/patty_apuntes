@@ -1,4 +1,4 @@
-"""Export service (Fase A): builds PDF/Excel outside the router.
+"""Export service: builds PDF/Excel outside the router.
 
 Moved verbatim from routers/records.py. Scale limit to avoid memory
 DoS (20 years = same validation MAX).

@@ -1,7 +1,7 @@
-/** Editor reads (Cut 2): the 6 useQuery hooks + initial snapshot.
+/** Editor reads: the 6 useQuery hooks + initial snapshot.
  *
- *  Verbatim move from pages/Editor.tsx — same keys, same
- *  enabled flags, same draft stats computation, same savedRef effect.
+ *  Same keys, same enabled flags, same draft stats computation,
+ *  same savedRef effect.
  */
 import { useEffect, type MutableRefObject } from "react"
 import { useQuery, type QueryClient } from "@tanstack/react-query"

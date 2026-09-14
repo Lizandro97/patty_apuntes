@@ -191,7 +191,7 @@ def delete(record_id: str, db: Session = Depends(get_db), user: User = Depends(g
     )
     if not a:
         raise HTTPException(404, {"code": "RECORD_NOT_FOUND", "message": "Not found"})
-    # Logical delete (Fase 2): travels as a tombstone in pull, never lost in sync.
+    # Logical delete: travels as a tombstone in pull, never lost in sync.
     a.deleted_at = datetime.now(UTC)
     touch_record(db, a)
     return {"ok": True}

@@ -1,4 +1,4 @@
-"""Sync conflict resolution service (Fase A).
+"""Sync conflict resolution service.
 
 Moved from routers/sync.py: the router validates the strategy, the service
 executes merge/mine/theirs against the LWW engine.

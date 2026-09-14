@@ -1,7 +1,7 @@
 """Shared save/export rules (Python mirror of packages/validation).
 
 Behavior is verified with the same JSON vectors (vectors.json) in
-tests/test_fase1_validation.py and bun test packages/. Any rule change
+tests/test_validation_rules.py and bun test packages/. Any rule change
 must update vectors + both sides at once.
 """
 

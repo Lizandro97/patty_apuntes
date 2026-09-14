@@ -1,4 +1,4 @@
-"""Fase 0 isolation: temp sqlite DB via env BEFORE importing the app.
+"""Test isolation: temp sqlite DB via env BEFORE importing the app.
 
 Without this, importing app.main would run the destructive block against the real patty.db.
 """

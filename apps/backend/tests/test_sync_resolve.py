@@ -1,4 +1,4 @@
-"""Fase 5: resolve merge/mine/theirs on an LWW conflict."""
+"""Resolve merge/mine/theirs on an LWW conflict."""
 
 from datetime import UTC, datetime, timedelta
 

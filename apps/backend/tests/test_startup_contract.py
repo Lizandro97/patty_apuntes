@@ -1,4 +1,4 @@
-"""Fase 0: non-destructive startup + frozen API contract."""
+"""Non-destructive startup + frozen API contract."""
 
 from sqlalchemy import func
 

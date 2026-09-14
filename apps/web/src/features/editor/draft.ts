@@ -1,8 +1,7 @@
-/** Draft + local→server reconciliation (Cut 4).
+/** Draft + local→server reconciliation.
  *
- *  Verbatim move from pages/Editor.tsx — same cache semantics
- *  and diff. Pure functions over QueryClient; the page provides qc,
- *  recordId, companies, t and language as parameters.
+ *  Same cache semantics and diff. Pure functions over QueryClient;
+ *  the page provides qc, recordId, companies, t and language as parameters.
  */
 import type { QueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/shared/queryKeys"

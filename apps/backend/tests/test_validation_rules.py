@@ -1,4 +1,4 @@
-"""Fase 1: backend applies the same rules as packages/validation (shared vectors)."""
+"""Backend applies the same rules as packages/validation (shared vectors)."""
 
 import json
 from pathlib import Path

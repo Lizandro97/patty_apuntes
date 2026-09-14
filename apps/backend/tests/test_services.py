@@ -1,4 +1,4 @@
-"""Fase A: services layer + aligned TS/Python contracts + device scoping."""
+"""Services layer + aligned TS/Python contracts + device scoping."""
 
 from types import SimpleNamespace
 

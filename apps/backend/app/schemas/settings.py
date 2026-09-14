@@ -1,4 +1,4 @@
-"""User preference DTOs (Fase A: own location).
+"""User preference DTOs.
 
 Re-exported from app.schemas.record for compatibility.
 """

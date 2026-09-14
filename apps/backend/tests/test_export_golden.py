@@ -1,4 +1,4 @@
-"""Fase 5: cross-platform golden — server Excel == expected grid."""
+"""Cross-platform golden — server Excel == expected grid."""
 
 import io
 import json

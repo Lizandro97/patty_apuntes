@@ -1,4 +1,4 @@
-/** Central queryKey factory (Fase B).
+/** Central queryKey factory.
  *
  *  Values are identical to the historic literals: changing them here
  *  does NOT invalidate the existing cache. Import from here instead of

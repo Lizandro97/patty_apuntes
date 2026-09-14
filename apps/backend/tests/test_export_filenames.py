@@ -1,4 +1,4 @@
-"""Fase 4: sanitized {slug}-{date} filenames, no path traversal."""
+"""Sanitized {slug}-{date} filenames, no path traversal."""
 
 from app.export.filenames import export_filename, slugify
 from tests.conftest import auth_headers, client

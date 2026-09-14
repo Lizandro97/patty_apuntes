@@ -1,4 +1,4 @@
-"""Fase 6: per-file staff_names (synced, validated, LWW)."""
+"""Per-file staff_names (synced, validated, LWW)."""
 
 from datetime import UTC, datetime
 

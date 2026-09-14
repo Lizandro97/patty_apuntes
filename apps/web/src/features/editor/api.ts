@@ -1,7 +1,6 @@
-/** Editor data layer (Cut 1): every HTTP call of the Editor.
+/** Editor data layer: every HTTP call of the Editor.
  *
- *  Verbatim move from pages/Editor.tsx — same URL, same body,
- *  same response. The page only changes the call-site.
+ *  Same URL, same body, same response. The page only changes the call-site.
  */
 import { api } from "@/lib/api"
 

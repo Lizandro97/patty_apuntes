@@ -1,6 +1,6 @@
 """Domain service for files (records): rows, cells, scale, progress.
 
-Moved verbatim from routers/records.py (Fase A) with two read-only
+Moved out of routers/records.py with two read-only
 optimizations: _ensure_cells and row_stats use grouped queries instead
 of N+1. No observable behavior change.
 """
