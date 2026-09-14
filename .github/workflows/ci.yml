@@ -19,6 +19,43 @@ jobs:
       - run: python -m pytest apps/backend/tests -q
         working-directory: .
 
+  backend-pg:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: patty
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: pip install -r apps/backend/requirements.txt
+      - run: pip install ruff pytest httpx email-validator
+      # Fresh PG is empty and the baseline migration is a no-op by design
+      # (tables come from init_db/create_all): init first, then migrate.
+      - run: python -c "from app.db.init import init_db; init_db(); print('pg boot ok')"
+        working-directory: apps/backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/patty
+      - run: alembic upgrade head
+        working-directory: apps/backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/patty
+      # Tests self-isolate to temp SQLite via tests/conftest.py; the PG
+      # coverage here is the init + Alembic migration above.
+      - run: python -m pytest apps/backend/tests -q
+        working-directory: .
+
   packages:
     runs-on: ubuntu-latest
     steps:

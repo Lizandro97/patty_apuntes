@@ -24,7 +24,9 @@ target_metadata = Base.metadata
 
 def _url() -> str:
     # La app manda: la URL vive en app/core/config.py (env DATABASE_URL).
-    return app_settings.DATABASE_URL
+    # resolved_database_url normaliza Neon (esquema + TLS); SQLite intacto.
+    # Use the direct (non-pooled) Neon URL for migrations when available.
+    return app_settings.resolved_database_url
 
 
 # other values from the config, defined by the needs of env.py,

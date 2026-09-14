@@ -17,6 +17,23 @@ def _default_secret() -> str:
     return secrets.token_hex(32)
 
 
+def _normalize_database_url(url: str) -> str:
+    """Normalize hosted Postgres URLs (Neon) for SQLAlchemy + psycopg2.
+
+    Accepts the `postgres://` / `postgresql://` forms hosting providers
+    hand out. TLS (`sslmode=require`) is enforced for Neon hosts only;
+    local/CI Postgres without TLS is left untouched.
+    SQLite URLs pass through untouched (local dev and tests).
+    """
+    if url.startswith("postgres://"):
+        url = "postgresql+psycopg2://" + url[len("postgres://") :]
+    elif url.startswith("postgresql://"):
+        url = "postgresql+psycopg2://" + url[len("postgresql://") :]
+    if "neon.tech" in url and "sslmode=" not in url:
+        url += ("&" if "?" in url else "?") + "sslmode=require"
+    return url
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -27,7 +44,9 @@ class Settings(BaseSettings):
     LOGIN_MAX_ATTEMPTS: int = 10
     LOGIN_WINDOW_SECONDS: int = 60
     DATABASE_URL: str = "sqlite:///./patty.db"
-    # for Postgres: postgresql+psycopg2://user:pass@localhost/patty
+    # for Postgres (Neon pooled URL also works): postgresql://user:pass@host/db
+    # Schemes `postgres://` and `postgresql://` are normalized, TLS enforced;
+    # see resolved_database_url below.
 
     # Local network: the backend listens on LAN, never localhost-only.
     HOST: str = "0.0.0.0"
@@ -37,6 +56,13 @@ class Settings(BaseSettings):
     # Files and uploads.
     ATTACH_DIR: str = "./uploads"
     MAX_UPLOAD_MB: int = 10
+
+    @property
+    def resolved_database_url(self) -> str:
+        """Runtime SQLAlchemy URL (Neon-normalized, SQLite untouched)."""
+        if self.DATABASE_URL.startswith("sqlite"):
+            return self.DATABASE_URL
+        return _normalize_database_url(self.DATABASE_URL)
 
     @property
     def attach_path(self) -> str:
