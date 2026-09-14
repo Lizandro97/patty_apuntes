@@ -18,6 +18,7 @@ import { downloadBlob, exportFilename } from "@/lib/filenames"
 import { Plus, Minus, Users, Calendar, Check, Save, Download, Eye, Undo2, Redo2, Settings2, FileText, Table2, Palette, RectangleVertical, RectangleHorizontal, PanelRightClose, PanelRightOpen, Menu, Pencil, X } from "lucide-react"
 import { CompanyPicker, DragHandle, NumberStepper, PERSON_COLORS, RowMenu, RowTextCell, useFloatPos } from "@/features/editor/components"
 import { editorApi } from "@/features/editor/api"
+import { useEditorData } from "@/features/editor/useEditorData"
 import { queryKeys } from "@/shared/queryKeys"
 
 const ZOOM_STEPS = [0.5, 0.6, 0.75, 1, 1.25, 1.5]
@@ -100,31 +101,9 @@ export function Editor() {
   const setMobileOpen = useUiStore((s) => s.setMobileOpen)
   const rightCollapsed = !rightOpen
   const setRightCollapsed = (v: boolean) => setRightOpen(!v)
-  const { data: record, isPending: recPending, isError: recError, refetch: recRefetch } = useQuery({ queryKey: queryKeys.record(recordId), enabled: !!recordId, queryFn: () => editorApi.getRecord(recordId!) })
-  const { data: rows, isPending: rowsPending, isError: rowsError, refetch: rowsRefetch } = useQuery({ queryKey: queryKeys.rows(recordId), enabled: !!recordId, queryFn: () => editorApi.getRows(recordId!) })
-  const { data: cells, isError: cellsError, refetch: cellsRefetch } = useQuery({ queryKey: queryKeys.cells(recordId), enabled: !!recordId, queryFn: () => editorApi.getCells(recordId!) })
-  const { data: statsData } = useQuery({ queryKey: queryKeys.stats(recordId), enabled: !!recordId, queryFn: () => editorApi.getStats(recordId!) })
-  // Draft: compute progress locally so the summary block works before Guardar
-  const stats = isDraft
-    ? (() => {
-        const list = ((cells as any[]) ?? [])
-        const total = list.length
-        const reviewed = list.filter((c: any) => c.reviewed).length
-        return total ? { total, reviewed, pending: total - reviewed, progress: Math.round((reviewed / total) * 100) } : null
-      })()
-    : statsData
-  const { data: companies, isError: companiesError, refetch: companiesRefetch } = useQuery({ queryKey: queryKeys.companies, queryFn: editorApi.getCompanies })
-  const { data: design } = useQuery({ queryKey: queryKeys.design(recordId), enabled: !!recordId, queryFn: () => editorApi.getDesign(recordId!) })
-  useEffect(() => {
-    if (!isDraft && record && rows && cells && !savedRef.current) {
-      savedRef.current = {
-        label: "saved",
-        rows: qc.getQueryData(queryKeys.rows(recordId)),
-        cells: qc.getQueryData(queryKeys.cells(recordId)),
-        record: qc.getQueryData(queryKeys.record(recordId)),
-      }
-    }
-  }, [isDraft, record, rows, cells])
+  const { record, rows, cells, stats, companies, design,
+    recPending, rowsPending, recError, rowsError, cellsError, companiesError,
+    recRefetch, rowsRefetch, cellsRefetch, companiesRefetch } = useEditorData(recordId, isDraft, qc, savedRef)
   const designPayload = (sec: "sheet" | "table"): any =>
     ((design as any[]) ?? []).find((d: any) => d.section === sec)?.payload ?? {}
   const colWidths: Record<string, number> = designPayload("table").cols ?? {}
