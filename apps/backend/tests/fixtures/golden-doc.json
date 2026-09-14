@@ -1,0 +1,69 @@
+{
+  "doc": {
+    "client_uuid": "golden-1",
+    "type": "review",
+    "title": "Golden",
+    "metadata": {
+      "review_type": "Anual"
+    },
+    "period_start": 2024,
+    "period_end": 2024,
+    "staff_count": 2,
+    "staff_names": [
+      "Ana",
+      "Luis"
+    ],
+    "sections": [
+      {
+        "client_uuid": "golden-1-f0",
+        "company_id": "af05c781-801a-48fd-a3a5-f0cffc307133",
+        "name_snapshot": "Golden SA",
+        "position": 0,
+        "assignee": "Ana",
+        "note": "OK"
+      },
+      {
+        "client_uuid": "golden-1-f1",
+        "company_id": "af05c781-801a-48fd-a3a5-f0cffc307133",
+        "name_snapshot": "Golden SA",
+        "position": 1
+      }
+    ],
+    "content": [
+      {
+        "client_uuid": "golden-1-c0",
+        "row_uuid": "golden-1-f0",
+        "year": 2024,
+        "month": 1,
+        "reviewed": true,
+        "color": "#0072B2"
+      },
+      {
+        "client_uuid": "golden-1-c1",
+        "row_uuid": "golden-1-f0",
+        "year": 2024,
+        "month": 2,
+        "reviewed": true,
+        "color": "#E69F00"
+      },
+      {
+        "client_uuid": "golden-1-c2",
+        "row_uuid": "golden-1-f1",
+        "year": 2024,
+        "month": 3,
+        "reviewed": true,
+        "color": "#009E73"
+      }
+    ],
+    "layout": {
+      "sheet": {},
+      "table": {}
+    },
+    "created_at": "2025-06-15T12:00:00+00:00",
+    "updated_at": "2025-06-15T12:00:00+00:00",
+    "revision": 0,
+    "device_id": "golden-dev",
+    "sync_status": "dirty",
+    "last_synced_revision": 0
+  }
+}

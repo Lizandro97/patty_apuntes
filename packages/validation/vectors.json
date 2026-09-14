@@ -1,0 +1,186 @@
+{
+  "comment": "Vectores compartidos TS (bun test) + Python (pytest). Misma conducta en web, movil y backend.",
+  "missingCompany": [
+    {
+      "rows": [
+        {
+          "id": "a",
+          "company_id": null,
+          "name_snapshot": "X"
+        }
+      ],
+      "expected": [
+        {
+          "row": 1,
+          "id": "a",
+          "field": "company",
+          "name": "X"
+        }
+      ]
+    },
+    {
+      "rows": [
+        {
+          "id": "a",
+          "company_id": "c1",
+          "name_snapshot": "A"
+        },
+        {
+          "id": "b",
+          "company_id": null,
+          "name_snapshot": ""
+        },
+        {
+          "id": "c",
+          "company_id": null,
+          "name_snapshot": "C"
+        }
+      ],
+      "expected": [
+        {
+          "row": 2,
+          "id": "b",
+          "field": "company",
+          "name": ""
+        },
+        {
+          "row": 3,
+          "id": "c",
+          "field": "company",
+          "name": "C"
+        }
+      ]
+    },
+    {
+      "rows": [
+        {
+          "id": "a",
+          "company_id": "c1",
+          "name_snapshot": "A"
+        }
+      ],
+      "expected": []
+    }
+  ],
+  "staff": [
+    {
+      "input": 0,
+      "expected": "STAFF_RANGE"
+    },
+    {
+      "input": 1,
+      "expected": null
+    },
+    {
+      "input": 5,
+      "expected": null
+    },
+    {
+      "input": 10,
+      "expected": null
+    },
+    {
+      "input": 11,
+      "expected": "STAFF_RANGE"
+    }
+  ],
+  "scale": [
+    {
+      "start": 2025,
+      "end": 2024,
+      "expected": "INVALID_SCALE"
+    },
+    {
+      "start": 2000,
+      "end": 2025,
+      "expected": "SCALE_TOO_WIDE"
+    },
+    {
+      "start": 2000,
+      "end": 2020,
+      "expected": null
+    },
+    {
+      "start": 2024,
+      "end": 2024,
+      "expected": null
+    }
+  ],
+  "companyName": [
+    {
+      "name": "   ",
+      "existing": [],
+      "expected": "EMPTY_NAME"
+    },
+    {
+      "name": "Acme",
+      "existing": [
+        "acme"
+      ],
+      "expected": "COMPANY_EXISTS"
+    },
+    {
+      "name": "Nuevo",
+      "existing": [
+        "acme"
+      ],
+      "expected": null
+    }
+  ],
+  "staffNames": [
+    {
+      "input": [
+        "Ana",
+        "Luis"
+      ],
+      "expected": null
+    },
+    {
+      "input": [],
+      "expected": null
+    },
+    {
+      "input": [
+        "  Ana  "
+      ],
+      "expected": null
+    },
+    {
+      "input": [
+        "Ana",
+        ""
+      ],
+      "expected": null
+    },
+    {
+      "input": [
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x"
+      ],
+      "expected": "STAFF_NAMES_INVALID"
+    },
+    {
+      "input": [
+        "AAAAAAAAAAAAAAAAAAAAAAAAA"
+      ],
+      "expected": "STAFF_NAMES_INVALID"
+    },
+    {
+      "input": "Ana",
+      "expected": "STAFF_NAMES_INVALID"
+    },
+    {
+      "input": null,
+      "expected": "STAFF_NAMES_INVALID"
+    }
+  ]
+}

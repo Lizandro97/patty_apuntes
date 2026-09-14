@@ -1,18 +1,18 @@
 # Deps
 node_modules/
-frontend/node_modules/
+apps/web/node_modules/
 
 # Build
-frontend/dist/
+apps/web/dist/
 dist/
 
 # Python
 __pycache__/
 *.py[cod]
 .venv/
-backend/.venv/
+apps/backend/.venv/
 .ruff_cache/
-backend/.ruff_cache/
+apps/backend/.ruff_cache/
 
 # DB local
 *.db
@@ -29,3 +29,6 @@ backend/.ruff_cache/
 .DS_Store
 .nohup.out
 nohup.out
+
+# Uploads locales (adjuntos usuario + artefactos tests)
+apps/backend/uploads/
