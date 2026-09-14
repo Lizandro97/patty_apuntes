@@ -21,7 +21,7 @@ function Protected({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-/** Puente SPA: el interceptor 401 emite el evento, aqui navegamos sin reload. */
+/** SPA bridge: the 401 interceptor emits the event, we navigate without reload. */
 function AuthEvents() {
   const nav = useNavigate()
   useEffect(() => {

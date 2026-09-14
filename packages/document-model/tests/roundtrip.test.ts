@@ -25,7 +25,7 @@ const layouts = [
 ];
 
 describe("fromServerParts", () => {
-  test("mapea record+rows+cells+layouts a Document", () => {
+  test("maps record+rows+cells+layouts to Document", () => {
     const doc = fromServerParts({ record, rows, cells, layouts } as never);
     expect(doc.client_uuid).toBe("r1");
     expect(doc.type).toBe("review");
@@ -39,8 +39,8 @@ describe("fromServerParts", () => {
   });
 });
 
-describe("remapLayoutRows (duplicar por posicion)", () => {
-  test("reasigna altos por posicion y conserva claves no-fila", () => {
+describe("remapLayoutRows (duplicate by position)", () => {
+  test("reassigns heights by position and keeps non-row keys", () => {
     const out = remapLayoutRows(
       { rows: { f1: { h: 30 }, f9: { h: 9 } }, header: { h: 44 } },
       [

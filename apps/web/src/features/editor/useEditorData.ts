@@ -1,7 +1,7 @@
-/** Lecturas del editor (Corte 2): los 6 useQuery + snapshot inicial.
+/** Editor reads (Cut 2): the 6 useQuery hooks + initial snapshot.
  *
- *  Movimiento verbatim desde pages/Editor.tsx — mismas keys, mismos
- *  enabled, mismo cálculo de stats en draft, mismo efecto savedRef.
+ *  Verbatim move from pages/Editor.tsx — same keys, same
+ *  enabled flags, same draft stats computation, same savedRef effect.
  */
 import { useEffect, type MutableRefObject } from "react"
 import { useQuery, type QueryClient } from "@tanstack/react-query"

@@ -1,4 +1,4 @@
-"""Fase 2: push/pull idempotente, tombstones, LWW determinista, corte tolerado."""
+"""Fase 2: idempotent push/pull, tombstones, deterministic LWW, tolerated abort."""
 
 from datetime import UTC, datetime, timedelta
 
@@ -83,7 +83,7 @@ def test_partial_batch_retry_without_loss():
     assert r.status_code == 200
     assert [a["client_uuid"] for a in body["accepted"]] == ["d-ok"]
     assert [c["client_uuid"] for c in body["conflicts"]] == ["d-conf"]
-    # Reintento identico: mismo resultado, sin duplicar ni perder.
+    # Identical retry: same result, no duplicates, no loss.
     r2 = _push(h, [_doc("d-conf", old, title="Viejo"), _doc("d-ok", new)])
     assert [a["client_uuid"] for a in r2.json()["accepted"]] == ["d-ok"]
     pulled = _pull(h, 0)
@@ -119,7 +119,7 @@ def test_delete_becomes_tombstone_visible_in_pull_not_in_list():
     assert rid not in [a["id"] for a in client.get("/api/records", headers=h).json()]
     pulled = _pull(h, 0)
     tombs = [d for d in pulled["changes"] if d.get("deleted_at")]
-    assert tombs, "el borrado debe viajar como tombstone"
+    assert tombs, "deletes must travel as tombstones"
 
 
 def test_web_change_visible_via_pull():

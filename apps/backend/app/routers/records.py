@@ -162,7 +162,7 @@ def put_layout(
     record = _require_record(record_id, db, user)
     if data.section not in LAYOUT_SECTIONS:
         raise HTTPException(
-            400, {"code": "SECTION_INVALID", "message": "section debe ser 'sheet' o 'table'"}
+            400, {"code": "SECTION_INVALID", "message": "section must be 'sheet' or 'table'"}
         )
     if not isinstance(data.payload, dict) or len(data.payload) > 500:
         raise HTTPException(400, {"code": "PAYLOAD_INVALID", "message": "Invalid payload"})
@@ -191,7 +191,7 @@ def delete(record_id: str, db: Session = Depends(get_db), user: User = Depends(g
     )
     if not a:
         raise HTTPException(404, {"code": "RECORD_NOT_FOUND", "message": "Not found"})
-    # Borrado logico (Fase 2): viaja como tombstone en pull, no se pierde en sync.
+    # Logical delete (Fase 2): travels as a tombstone in pull, never lost in sync.
     a.deleted_at = datetime.now(UTC)
     touch_record(db, a)
     return {"ok": True}
@@ -531,10 +531,10 @@ def export_file(
 ):
     txt = strings(lang)
     if format not in ("pdf", "excel"):
-        raise HTTPException(400, {"code": "FORMAT_INVALID", "message": "format debe ser pdf|excel"})
+        raise HTTPException(400, {"code": "FORMAT_INVALID", "message": "format must be pdf|excel"})
     record = records_service.require_record(record_id, db, user)
     if record.period_end - record.period_start + 1 > MAX_EXPORT_YEARS:
-        raise HTTPException(400, {"code": "SCALE_TOO_LARGE", "message": "Escala muy grande"})
+        raise HTTPException(400, {"code": "SCALE_TOO_LARGE", "message": "Scale too large"})
     rows = records_service.ensure_live(db, record)
     rows = sorted(rows, key=lambda f: f.position)
     missing = records_service.missing_fields(rows)
@@ -544,7 +544,7 @@ def export_file(
             detail={
                 "code": "EXPORT_MISSING_FIELDS",
                 "message": "Missing required fields to export",
-                "faltantes": missing,
+                "missing": missing,
             },
         )
     cells = db.query(Cell).filter(Cell.record_id == record_id).all()

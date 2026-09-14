@@ -1,4 +1,4 @@
-"""Fase 5: adjuntos (upload/list/content, dedup, MIME, tamano, PDF con imagen)."""
+"""Fase 5: attachments (upload/list/content, dedup, MIME, size, PDF with image)."""
 
 import io
 

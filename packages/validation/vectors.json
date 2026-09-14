@@ -1,5 +1,5 @@
 {
-  "comment": "Vectores compartidos TS (bun test) + Python (pytest). Misma conducta en web, movil y backend.",
+  "comment": "Shared TS (bun test) + Python (pytest) vectors. Same behavior on web and backend.",
   "missingCompany": [
     {
       "rows": [

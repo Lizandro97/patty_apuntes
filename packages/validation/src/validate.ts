@@ -1,6 +1,6 @@
-// Reglas save/export compartidas web/movil/backend (ARCHITECTURE.md §9).
-// Codigos identicos a HTTPException backend + i18n errors.*.
-// Las filas se reciben en orden de presentacion; `row` es 1-based en ese orden.
+// Shared save/export rules (web/backend).
+// Same codes as backend HTTPExceptions + i18n errors.*.
+// Rows arrive in display order; `row` is 1-based in that order.
 
 export type ErrorCode =
   | "STAFF_RANGE"
@@ -28,7 +28,7 @@ export interface RowLike {
   name_snapshot?: string | null;
 }
 
-/** Filas sin empresa registrada (espejo de _missing_fields + Editor). */
+/** Rows without a registered company (mirror of missing_fields + Editor). */
 export function findRowsMissingCompany<T extends RowLike>(
   rows: T[],
   opts?: { skip?: (row: T) => boolean },
@@ -43,7 +43,7 @@ export function findRowsMissingCompany<T extends RowLike>(
   return out;
 }
 
-/** Alias semantico: export exige lo mismo que guardar. */
+/** Semantic alias: export requires the same as save. */
 export function validateForExport<T extends RowLike>(rows: T[]): MissingField[] {
   return findRowsMissingCompany(rows);
 }
@@ -59,7 +59,7 @@ export function validateStaff(n: number): RuleError | null {
   return null;
 }
 
-/** Nombres del equipo, posicionales: "" = sin nombre (P{i+1}). Espejo Python. */
+/** Team names, positional: "" = unnamed (P{i+1}). TS mirror. */
 export function validateStaffNames(names: unknown): RuleError | null {
   if (!Array.isArray(names) || names.length > 10) {
     return { code: "STAFF_NAMES_INVALID", message: "staff_names must be a list of max 10" };
@@ -72,13 +72,13 @@ export function validateStaffNames(names: unknown): RuleError | null {
   return null;
 }
 
-/** Sanea para guardar/sync: trim, max 24, max 10, conserva posiciones. */
+/** Sanitize for save/sync: trim, max 24, max 10, keep positions. */
 export function sanitizeStaffNames(names: unknown): string[] {
   if (!Array.isArray(names)) return [];
   return names.slice(0, 10).map((n) => (typeof n === "string" ? n : "").trim().slice(0, 24));
 }
 
-/** Nombre visible de la persona i: custom o P{i+1}. */
+/** Display name of person i: custom or P{i+1}. */
 export function personName(names: readonly string[] | undefined | null, i: number): string {
   const n = names?.[i]?.trim();
   return n || `P${i + 1}`;

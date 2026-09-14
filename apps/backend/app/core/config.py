@@ -11,8 +11,8 @@ _INSECURE_DEFAULT_MARKER = "insecure-dev-only"
 
 def _default_secret() -> str:
     logger.warning(
-        "SECRET_KEY no configurada: se genera una clave efimera solo para dev/test. "
-        "Define SECRET_KEY en el entorno para despliegues."
+        "SECRET_KEY is not set: generating an ephemeral dev/test-only key. "
+        "Set SECRET_KEY in the environment for deployments."
     )
     return secrets.token_hex(32)
 
@@ -27,20 +27,20 @@ class Settings(BaseSettings):
     LOGIN_MAX_ATTEMPTS: int = 10
     LOGIN_WINDOW_SECONDS: int = 60
     DATABASE_URL: str = "sqlite:///./patty.db"
-    # para Postgres: postgresql+psycopg2://user:pass@localhost/patty
+    # for Postgres: postgresql+psycopg2://user:pass@localhost/patty
 
-    # Red local (Fase 0/4): el backend escucha en LAN, nunca solo localhost.
+    # Local network: the backend listens on LAN, never localhost-only.
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
     FOLIORA_HOSTNAME: str = "foliora.local"
-    # Archivos y subidas (Fase 4/5).
+    # Files and uploads.
     ATTACH_DIR: str = "./uploads"
     MAX_UPLOAD_MB: int = 10
 
     @property
     def attach_path(self) -> str:
-        """Ruta absoluta del directorio de adjuntos (evita relativos ambiguos)."""
+        """Absolute path of the attachments directory (avoids ambiguous relatives)."""
         from pathlib import Path
 
         return str(Path(self.ATTACH_DIR).expanduser().resolve())

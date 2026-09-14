@@ -20,7 +20,7 @@ _CHUNK = 1024 * 1024
 
 
 def _sniff_mime(head: bytes) -> str | None:
-    """Detecta el tipo real por magic bytes (no confia en el header del cliente)."""
+    """Detect the real type via magic bytes (never trust the client header)."""
     if head.startswith(b"\xff\xd8\xff"):
         return "image/jpeg"
     if head.startswith(b"\x89PNG\r\n\x1a\n"):
@@ -71,11 +71,11 @@ def upload(
     max_bytes = settings.MAX_UPLOAD_MB * 1024 * 1024
     declared = request.headers.get("content-length")
     if declared and declared.isdigit() and int(declared) > max_bytes + 1024 * 1024:
-        raise HTTPException(400, {"code": "FILE_TOO_LARGE", "message": "Archivo muy grande"})
+        raise HTTPException(400, {"code": "FILE_TOO_LARGE", "message": "File too large"})
     claimed = (file.content_type or "").split(";")[0].strip().lower()
     if claimed not in ALLOWED_MIME:
-        raise HTTPException(400, {"code": "MIME_INVALID", "message": "Tipo no permitido"})
-    # Lectura acotada por chunks: nunca se carga mas de max_bytes en RAM.
+        raise HTTPException(400, {"code": "MIME_INVALID", "message": "Type not allowed"})
+    # Chunked bounded read: never more than max_bytes lands in RAM.
     chunks: list[bytes] = []
     size = 0
     while True:
@@ -84,14 +84,14 @@ def upload(
             break
         size += len(part)
         if size > max_bytes:
-            raise HTTPException(400, {"code": "FILE_TOO_LARGE", "message": "Archivo muy grande"})
+            raise HTTPException(400, {"code": "FILE_TOO_LARGE", "message": "File too large"})
         chunks.append(part)
     data = b"".join(chunks)
     if not data:
-        raise HTTPException(400, {"code": "FILE_EMPTY", "message": "Archivo vacio"})
+        raise HTTPException(400, {"code": "FILE_EMPTY", "message": "Empty file"})
     mime = _sniff_mime(data[:16])
     if mime is None or mime != claimed:
-        raise HTTPException(400, {"code": "MIME_MISMATCH", "message": "El contenido no coincide"})
+        raise HTTPException(400, {"code": "MIME_MISMATCH", "message": "Content does not match"})
     digest = hashlib.sha256(data).hexdigest()
     existing = (
         db.query(Attachment)

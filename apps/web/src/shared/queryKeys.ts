@@ -1,8 +1,8 @@
-/** Factoria central de queryKeys (Fase B).
+/** Central queryKey factory (Fase B).
  *
- *  Los valores son identicos a los literales historicos: cambiar aqui
- *  NO invalida la cache existente. Importar desde aqui en vez de
- *  escribir ["records"], ["cells", id], etc. a mano.
+ *  Values are identical to the historic literals: changing them here
+ *  does NOT invalidate the existing cache. Import from here instead of
+ *  hand-writing ["records"], ["cells", id], etc.
  */
 export const queryKeys = {
   records: ["records"],

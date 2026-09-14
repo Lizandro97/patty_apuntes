@@ -1,7 +1,7 @@
-"""Servicio de exportacion (Fase A): construye PDF/Excel fuera del router.
+"""Export service (Fase A): builds PDF/Excel outside the router.
 
-Movido verbatim desde routers/records.py. Limite de escala para evitar
-DoS de memoria (20 años = mismo MAX de validacion).
+Moved verbatim from routers/records.py. Scale limit to avoid memory
+DoS (20 years = same validation MAX).
 """
 
 import io
@@ -207,7 +207,7 @@ def build_pdf(
     )
     t.setStyle(style)
     story.append(t)
-    # Adjuntos de imagen como miniaturas al final del PDF.
+    # Image attachments as thumbnails at the end of the PDF.
     from reportlab.platypus import Image as _RLImage
 
     for att in db.query(Attachment).filter(Attachment.record_id == record.id).all():

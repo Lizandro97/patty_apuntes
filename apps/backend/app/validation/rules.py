@@ -1,13 +1,13 @@
-"""Reglas save/export compartidas (espejo Python de packages/validation).
+"""Shared save/export rules (Python mirror of packages/validation).
 
-Conducta verificada con los mismos vectores JSON (vectors.json) en
-tests/test_fase1_validation.py y bun test packages/. Cualquier cambio de
-regla debe actualizar vectores + ambos lados a la vez.
+Behavior is verified with the same JSON vectors (vectors.json) in
+tests/test_fase1_validation.py and bun test packages/. Any rule change
+must update vectors + both sides at once.
 """
 
 
 def find_rows_missing_company(rows: list[dict]) -> list[dict]:
-    """Filas sin empresa. `row` es 1-based en el orden recibido."""
+    """Rows without a company. `row` is 1-based in the received order."""
     out = []
     for i, f in enumerate(rows, 1):
         if not f.get("company_id"):
@@ -29,9 +29,9 @@ def validate_staff(n) -> dict | None:
 
 
 def sanitize_staff_names(names) -> list[str]:
-    """Nombres del equipo, posicionales: trim, max 24 caracteres, max 10.
-    "" significa sin nombre (se muestra P{i+1}); se conservan posiciones.
-    Alineado con TS: solo strings se conservan (0/False/None -> "")."""
+    """Team names, positional: trim, max 24 chars, max 10.
+    "" means unnamed (shown as P{i+1}); positions are preserved.
+    Aligned with TS: only strings are kept (0/False/None -> "")."""
     if not isinstance(names, list):
         return []
     return [(n.strip()[:24] if isinstance(n, str) else "") for n in names[:10]]
@@ -68,5 +68,5 @@ def validate_company_name(name: str, existing_lower: list[str]) -> dict | None:
     if not trimmed:
         return {"code": "EMPTY_NAME", "message": "Empty name"}
     if trimmed.lower() in [e.lower() for e in existing_lower]:
-        return {"code": "COMPANY_EXISTS", "message": "Company ya existe"}
+        return {"code": "COMPANY_EXISTS", "message": "Company already exists"}
     return None

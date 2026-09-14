@@ -33,7 +33,7 @@ import { queryKeys } from "@/shared/queryKeys"
 const ZOOM_STEPS = [0.5, 0.6, 0.75, 1, 1.25, 1.5]
 const defaultZoom = () => 1
 const monthKey = (y: number, mi: number) => `m:${y}:${mi + 1}`
-// Puras sin scope del componente: fuera para no recrearlas en cada render.
+// Pure helpers without component scope: outside so they are not recreated per render.
 const monthClass = (_key: string) => `flex-none text-center relative`
 const ownerOf = (color: string | null | undefined) => PERSON_COLORS.indexOf(color ?? "")
 // A seeded empty row carries nothing to persist (no company/name/marks/text)
@@ -45,8 +45,8 @@ export function Editor() {
   const { t } = useTranslation()
   const { id } = useParams()
   const qc = useQueryClient()
-  // Selectores finos: evita re-render global cuando cambia un setting/header
-  // que este Editor no usa (antes: suscripcion total al store).
+  // Fine-grained selectors: avoid global re-render when an unused setting/header
+  // changes (was: total store subscription).
   const autosave = useSettingsStore(s => s.autosave)
   const table_header_bg = useSettingsStore(s => s.table_header_bg)
   const visibleFields = useSettingsStore(s => s.visible_fields)
@@ -65,14 +65,14 @@ export function Editor() {
   const recordId = id
   const pickBtnRef = useRef<HTMLButtonElement | null>(null)
   // Draft mode: /editor without :id opens a blank sheet that lives only in
-  // local cache. Zero server writes until the user hits Guardar. Opened files
+  // local cache. Zero server writes until the user hits Save. Opened files
   // keep the existing autosave behavior.
   const isDraft = !recordId
-  // Autosave (device-local setting): when OFF, file edits stay local until Guardar
+  // Autosave (device-local setting): when OFF, file edits stay local until Save
   const persist = <T,>(fn: () => Promise<T>): Promise<T | null> =>
     (isDraft || autosave === false) ? Promise.resolve(null) : fn()
   const localOnly = isDraft || autosave === false
-  // Last server-confirmed state, for reconciling on Guardar with autosave OFF
+  // Last server-confirmed state, for reconciling on Save with autosave OFF
   // (effect placed after the queries — see below)
   const savedRef = useRef<HistorySnapshot | null>(null)
   const [pickRowId, setPickRowId] = useState<string | null>(null)
@@ -84,7 +84,7 @@ export function Editor() {
   const [orientation, setOrientation] = useState<"vertical" | "horizontal">("vertical")
   const [preview, setPreview] = useState(false)
   // Active stamping person (PERSON_COLORS index). Device-local:
-  // se guarda en localStorage, no en el backend.
+  // stored in localStorage, never in the backend.
   const [personIdx, setPersonIdx] = useState(0)
   useEffect(() => {
     try {
@@ -127,7 +127,7 @@ export function Editor() {
   const designTimers = useRef<{ sheet?: any; table?: any }>({})
   useEffect(() => () => { clearTimeout(designTimers.current.sheet); clearTimeout(designTimers.current.table) }, [recordId])
   const schedulePutDesign = (section: "sheet" | "table") => {
-    if (isDraft) return // draft layout lives in cache until Guardar
+    if (isDraft) return // draft layout lives in cache until Save
     clearTimeout(designTimers.current[section])
     designTimers.current[section] = setTimeout(async () => {
       try {
@@ -221,7 +221,7 @@ export function Editor() {
   const guideRow = (rowId: string) => activeGuide?.axis === "y" && activeGuide.key === rowId
   const HEADER_KEY = "header"
   const headerH: number | undefined = rowHeights[HEADER_KEY]
-  // Celda seleccionada (foco para recolorear desde el panel sin desmarcar).
+  // Selected cell (focus to recolor from the panel without deselecting).
   // Cleared when toggling a checkbox, on Esc, in preview, or when clicking outside selection/palette.
   const [selCell, setSelCell] = useState<{ rowId: string; year: number; month: number } | null>(null)
   useEffect(() => {
@@ -312,7 +312,7 @@ export function Editor() {
     const s = snapshotCurrent(label)
     // Don't push empty initial snapshots (nothing loaded yet)
     if (!s.rows && !s.cells && !s.record) return
-    // Coalesce rapid consecutive stamps (undo por toggle = ruido -> un paso por ráfaga)
+    // Coalesce rapid consecutive stamps (undo per toggle = noise -> one step per burst)
     const st = useHistoryStore.getState()
     const prev = lastPush.current
     const now = Date.now()
@@ -382,13 +382,13 @@ export function Editor() {
     document.addEventListener("keydown", h)
     return () => document.removeEventListener("keydown", h)
   }, [preview, selCell, recordId, rows, cells, record])
-  // Draft: operaciones sobre cache local (implementación en features/editor/draft).
+  // Draft: local-cache operations (implemented in features/editor/draft).
   const draftApplyRow = (p: any) => draftApplyRowToCache(qc, recordId, companies, p)
   const draftApplyRowPatch = (rowId: string, patch: any) =>
     draftApplyRowPatchToCache(qc, recordId, companies, rowId, patch)
   const draftDeleteRow = (rowId: string) => draftDeleteRowFromCache(qc, recordId, rowId)
   const draftApplyRecord = (patch: any) => draftApplyRecordToCache(qc, recordId, patch)
-  // Mutaciones (hook): consumen draft fns + push definidos arriba.
+  // Mutations (hook): consume the draft fns + push defined above.
   const { push } = useToast()
   const staffNames: string[] = Array.isArray((record as any)?.staff_names) ? (record as any).staff_names : []
   const activePerson = Math.min(personIdx, Math.max(0, (record?.staff_count ?? 1) - 1))
@@ -426,7 +426,7 @@ export function Editor() {
   }, [fabOpen])
   const orderedRows = ((rows as any[]) ?? []).slice().sort((a: any, b: any) => a.position - b.position)
   // required for save/export: every row needs a registered company (months can be filled freely)
-  // Regla compartida con backend/movil: packages/validation (mismo codigo, mismos vectores).
+  // Rule shared with backend: packages/validation (same code, same vectors).
   const missingCompany = () => findRowsMissingCompany(orderedRows)
   // Draft persist: creates the whole sheet on the server in one chain.
   // Returns the new record id, or null when validation stopped the flow.
@@ -548,8 +548,8 @@ export function Editor() {
         const cur = snapshotCurrent("save")
         await syncSnapshotToServer(cur, savedRef.current ?? { label: "", rows: [], cells: [], record: undefined }, true)
       } else {
-        // Autosave honesto: el título/tipo/escala ya hacen PUT al editar.
-        // Guardar persiste el layout pendiente y revalida contra servidor.
+        // Honest autosave: title/type/scale already PUT on edit.
+        // Save persists the pending layout and revalidates against the server.
         const pending = (designTimers.current.sheet || designTimers.current.table)
         if (pending) await new Promise((r) => setTimeout(r, 550))
       }
@@ -583,7 +583,7 @@ export function Editor() {
       const blob = await editorApi.exportBlob(recordId!, fmt, i18n.language)
       downloadBlob(blob, exportFilename((record as any)?.title ?? t("records.downloadBase"), fmt === "pdf" ? "pdf" : "xlsx"))
     } catch (e: any) {
-      const falt = e?.response?.data?.detail?.faltantes
+      const falt = e?.response?.data?.detail?.missing
       if (e?.response?.status === 422 && falt) setValidAlert(falt)
       else push({ kind: "error", title: t("common.exportError"), desc: e?.response?.data?.detail?.message ?? undefined, actionLabel: t("common.retry"), onAction: () => exportFile(fmt) })
     }
@@ -647,7 +647,7 @@ export function Editor() {
   return (
     <div className="flex flex-1 min-w-0 min-h-0 bg-[var(--bg)]">
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
-        {/* Barra única del editor: título + vista + acciones */}
+        {/* Single editor bar: title + view + actions */}
         <div className="flex items-center gap-2 px-3 h-[52px] bg-[var(--bg)] border-b border-[var(--border)] shrink-0 text-[12px] text-[var(--text-dim)] overflow-x-auto lg:overflow-visible" role="toolbar" aria-label={t("editor.toolbar.label")}>
           <button
             onClick={() => setMobileOpen(true)}
@@ -855,7 +855,7 @@ export function Editor() {
         </div>
       </div>
 
-      {/* Right Panel fusionado — 2 subpestañas, colapsable; drawer en <lg (siempre montado: anima como el sidebar) */}
+      {/* Merged right panel — 2 sub-tabs, collapsible; drawer under lg (always mounted: animates like the sidebar) */}
       <div className={`fixed inset-0 z-30 bg-black/60 lg:hidden transition-opacity duration-200 motion-reduce:transition-none ${mPanel ? "opacity-100" : "opacity-0 pointer-events-none"}`} onClick={() => setMPanel(false)} aria-hidden />
       <div className={`${rightCollapsed && !mPanel ? "lg:w-[56px]" : "lg:w-[320px]"} fixed lg:static inset-y-0 right-0 z-40 w-[min(320px,85vw)] bg-[var(--bg)] border-l border-[var(--border)] flex flex-col shrink-0 overflow-hidden pb-[env(safe-area-inset-bottom)] ${mPanel ? "max-lg:translate-x-0 max-lg:visible" : "max-lg:translate-x-full max-lg:invisible max-lg:pointer-events-none"} lg:translate-x-0 lg:visible transition-[width,transform,opacity] duration-200 ease-out motion-reduce:transition-none`}>
         <div className="lg:hidden flex items-center justify-between px-3 pt-[max(0.75rem,env(safe-area-inset-top))] shrink-0">
@@ -1035,7 +1035,7 @@ export function Editor() {
       </div>
       </div>
 
-      {/* FAB móvil: desborde del toolbar (el menú "..." se eliminó: lo recortaba el overflow) */}
+      {/* Mobile FAB: toolbar overflow (the "..." menu was removed: overflow clipped it) */}
       <div
         aria-hidden
         onClick={() => setFabOpen(false)}

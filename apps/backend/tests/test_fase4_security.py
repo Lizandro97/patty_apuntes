@@ -1,4 +1,4 @@
-"""Fase 4: refresh JWT, rate-limit login, pairing 1 uso, revoke devices."""
+"""Fase 4: JWT refresh, login rate-limit, single-use pairing, device revoke."""
 
 from tests.conftest import auth_headers, client
 
@@ -53,7 +53,7 @@ def test_pairing_claim_and_revoke():
     c = client.post("/api/sync/devices/claim", json={"pairing_token": token, "name": "Pixel"})
     assert c.status_code == 200, c.text
     device_id = c.json()["device_id"]
-    # Un solo uso.
+    # Single use.
     c2 = client.post("/api/sync/devices/claim", json={"pairing_token": token, "name": "Otro"})
     assert c2.status_code == 400
     # Revoke.

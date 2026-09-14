@@ -1,4 +1,4 @@
-"""Fase 5: golden cross-platform — el Excel del servidor == grilla esperada."""
+"""Fase 5: cross-platform golden — server Excel == expected grid."""
 
 import io
 import json
@@ -9,7 +9,7 @@ from openpyxl import load_workbook
 from tests.conftest import auth_headers, client
 
 # Fixtures golden cross-platform: antes vivian en packages/sync (paquete RN
-# eliminado); ahora son locales del backend, que es su unico consumidor.
+# removed); now backend-local, its only consumer.
 FIX = Path(__file__).resolve().parent / "fixtures"
 GOLDEN_DOC = json.loads((FIX / "golden-doc.json").read_text())["doc"]
 GOLDEN_EXCEL = json.loads((FIX / "golden-excel.json").read_text())

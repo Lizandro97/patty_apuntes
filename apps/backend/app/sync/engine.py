@@ -1,10 +1,10 @@
-"""Motor sync LWW v1 (Fase 2).
+"""LWW v1 sync engine.
 
-- `revision` global via sync_meta (un contador, +1 por commit aceptado).
-- `touch_record`: marca updated_at/revision/device tras cada mutacion local.
-- `apply_doc`: upsert idempotente por client_uuid; LWW por updated_at
-  (empate: device_id lexicografico mayor). Reintento identico -> accepted
-  sin cambios. Reemplazo wholesale documento (merge por celda en Fase 5).
+- Global `revision` via sync_meta (one counter, +1 per accepted commit).
+- `touch_record`: stamps updated_at/revision/device after each local mutation.
+- `apply_doc`: idempotent upsert by client_uuid; LWW by updated_at
+  (tie: lexicographically greater device_id). Identical retry -> accepted
+  with no changes. Wholesale document replacement (per-cell merge later).
 """
 
 import uuid
@@ -30,7 +30,7 @@ def parse_dt(v) -> datetime:
     elif isinstance(v, str) and v.strip():
         dt = datetime.fromisoformat(v.strip().replace("Z", "+00:00"))
     else:
-        raise SyncInvalid("updated_at requerido")
+        raise SyncInvalid("updated_at is required")
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC)
     return dt.astimezone(UTC)
@@ -67,8 +67,8 @@ def touch_record(
     device_id: str | None = None,
     updated_at: datetime | None = None,
 ) -> Record:
-    # Preserva el timestamp del escritor (LWW); solo usa hora local en
-    # mutaciones web directas. Sobrescribirlo romperia la idempotencia.
+    # Preserve the writer's timestamp (LWW); only use local time on
+    # direct web mutations. Overwriting it would break idempotency.
     record.updated_at = updated_at or datetime.now(UTC)
     record.revision = next_revision(db)
     if device_id is not None:
@@ -86,7 +86,7 @@ def incoming_wins(
     incoming_updated: datetime,
     incoming_device: str | None,
 ) -> bool:
-    """LWW: gana el mas nuevo; en empate, device_id mayor."""
+    """LWW: newest wins; on tie, greater device_id."""
     s = stored_updated if stored_updated.tzinfo else stored_updated.replace(tzinfo=UTC)
     if incoming_updated > s:
         return True
@@ -157,10 +157,10 @@ def record_to_doc(db: Session, record: Record) -> dict:
 
 def _require_doc_shape(doc: dict) -> tuple[str, datetime, str | None]:
     if not isinstance(doc, dict):
-        raise SyncInvalid("change debe ser objeto")
+        raise SyncInvalid("change must be an object")
     cuid = doc.get("client_uuid")
     if not cuid or not isinstance(cuid, str):
-        raise SyncInvalid("client_uuid requerido")
+        raise SyncInvalid("client_uuid is required")
     return cuid, parse_dt(doc.get("updated_at")), doc.get("device_id")
 
 
@@ -169,7 +169,7 @@ def _replace_parts(db: Session, record: Record, doc: dict) -> None:
     content = doc.get("content") or []
     layout = doc.get("layout") or {}
     if not isinstance(sections, list) or not isinstance(content, list):
-        raise SyncInvalid("sections/content deben ser listas")
+        raise SyncInvalid("sections/content must be lists")
 
     record.title = doc.get("title") or record.title
     meta = doc.get("metadata") or {}
@@ -191,7 +191,7 @@ def _replace_parts(db: Session, record: Record, doc: dict) -> None:
     row_ids = set()
     for s in sections:
         if not isinstance(s, dict) or not s.get("client_uuid"):
-            raise SyncInvalid("section sin client_uuid")
+            raise SyncInvalid("section without client_uuid")
         row_ids.add(s["client_uuid"])
         db.add(
             RecordRow(
@@ -206,7 +206,7 @@ def _replace_parts(db: Session, record: Record, doc: dict) -> None:
         )
     for c in content:
         if not isinstance(c, dict) or c.get("row_uuid") not in row_ids:
-            raise SyncInvalid("cell con row_uuid desconocido")
+            raise SyncInvalid("cell with unknown row_uuid")
         db.add(
             Cell(
                 id=c.get("client_uuid") or str(uuid.uuid4()),
@@ -229,10 +229,10 @@ def _replace_parts(db: Session, record: Record, doc: dict) -> None:
 
 
 def merge_docs(server_doc: dict, incoming_doc: dict) -> dict:
-    """Fusion v2: union de filas + OR de celdas + metadata del mas nuevo.
+    """Merge v2: row union + cell OR + newest metadata.
 
-    Espejo TS en packages/sync (mergeDocuments). Ningun marcado se pierde:
-    si algun lado reviso la celda, queda revisada.
+    TS mirror in packages/sync (mergeDocuments). No check is ever lost:
+    if either side reviewed the cell, it stays reviewed.
     """
     out: dict = dict(server_doc)
     s_sections = server_doc.get("sections") or []
@@ -283,14 +283,14 @@ def merge_docs(server_doc: dict, incoming_doc: dict) -> dict:
 
 
 def apply_doc(db: Session, user_id: str, doc: dict) -> tuple[str, dict | Record]:
-    """Aplica un Document. Devuelve ("accepted", record) o ("conflict", server_doc)."""
+    """Apply a Document. Returns ("accepted", record) or ("conflict", server_doc)."""
     cuid, incoming_updated, incoming_device = _require_doc_shape(doc)
     stored = db.query(Record).filter(Record.client_uuid == cuid, Record.user_id == user_id).first()
     if not stored:
         record = Record(
             user_id=user_id,
             client_uuid=cuid,
-            title=doc.get("title") or "Sin título",
+            title=doc.get("title") or "Untitled",
             deleted_at=None,
         )
         db.add(record)

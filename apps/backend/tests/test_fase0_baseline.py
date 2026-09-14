@@ -1,4 +1,4 @@
-"""Fase 0: arranque no destructivo + contrato API congelado."""
+"""Fase 0: non-destructive startup + frozen API contract."""
 
 from sqlalchemy import func
 
@@ -19,7 +19,7 @@ def test_double_startup_preserves_data():
     assert r.status_code == 200, r.text
     record_id = r.json()["id"]
 
-    # Segundo arranque: debe ser idempotente y conservar filas.
+    # Second startup: must be idempotent and preserve rows.
     init_db()
     init_db()
 

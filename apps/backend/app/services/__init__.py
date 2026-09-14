@@ -1,5 +1,5 @@
-"""Capa de servicios (Fase A): logica de negocio fuera de los routers.
+"""Service layer (Fase A): business logic outside the routers.
 
-Los routers validan/transportean; los servicios operan. Sin dependencias
-a FastAPI: reciben Session + DTOs y devuelven modelos o tipos simples.
+Routers validate/transport; services operate. No FastAPI dependencies:
+they receive a Session + DTOs and return models or plain types.
 """

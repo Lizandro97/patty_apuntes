@@ -1,8 +1,8 @@
-"""Inicializacion no destructiva del esquema (Fase 0).
+"""Non-destructive schema initialization (Fase 0).
 
-Solo crea tablas faltantes. Nunca borra ni modifica filas existentes:
-el arranque repetido debe conservar users/records (test_fase0_baseline).
-Las evoluciones de esquema van por Alembic a partir de Fase 2.
+Only creates missing tables. Never deletes or modifies existing rows:
+repeated startup must preserve users/records (test_fase0_baseline).
+Schema evolution goes through Alembic from Fase 2 on.
 """
 
 from sqlalchemy import inspect, text
@@ -11,10 +11,10 @@ from app.db.session import Base, engine
 
 
 def _ensure_device_user_id() -> None:
-    """Migracion ligera no destructiva: devices.user_id (Fase 0 seguridad).
+    """Lightweight non-destructive migration: devices.user_id (Fase 0 security).
 
-    create_all no agrega columnas a tablas existentes; este ALTER cubre
-    bases SQLite ya creadas sin tocar filas.
+    create_all does not add columns to existing tables; this ALTER covers
+    already-created SQLite databases without touching rows.
     """
     if engine.dialect.name != "sqlite":
         return

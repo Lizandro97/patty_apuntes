@@ -16,7 +16,7 @@ __all__ = [
     "CellBulkUpdate",
     "LayoutOut",
     "LayoutUpdate",
-    # Re-export por compat (ubicacion canonica: app.schemas.settings).
+    # Re-export for compat (canonical location: app.schemas.settings).
     "SettingsUpdate",
     "SettingsOut",
 ]
@@ -37,14 +37,14 @@ class RecordCreate(BaseModel):
     def _strip_title(cls, v: str) -> str:
         v = v.strip()
         if not v:
-            raise ValueError("title vacio")
+            raise ValueError("empty title")
         return v
 
     @field_validator("period_start", "period_end")
     @classmethod
     def _year_range(cls, v: int) -> int:
         if not MIN_YEAR <= v <= MAX_YEAR:
-            raise ValueError(f"año fuera de rango {MIN_YEAR}-{MAX_YEAR}")
+            raise ValueError(f"year out of range {MIN_YEAR}-{MAX_YEAR}")
         return v
 
 

@@ -1,4 +1,4 @@
-/** Formato de fechas unico (antes triplicado en Inicio/Records/Companies). */
+/** Single date formatter (was triplicated across Inicio/Records/Companies). */
 export function fmtDate(v: string | number | Date | null | undefined, lang: string): string {
   if (!v) return "—"
   const d = v instanceof Date ? v : new Date(v)

@@ -8,7 +8,7 @@ from app.db.session import Base
 
 
 class Attachment(Base):
-    """Metadatos de adjuntos (Fase 2: tabla; endpoints en Fase 5)."""
+    """Attachment metadata."""
 
     __tablename__ = "attachments"
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))

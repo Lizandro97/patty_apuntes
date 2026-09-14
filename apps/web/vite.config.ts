@@ -11,10 +11,10 @@ export default defineConfig({
     },
   },
   server: {
-    host: true, // LAN: el celular entra por http://<ip-pc>:5173
+    host: true, // LAN: the phone reaches the dev server at http://<pc-ip>:5173
     port: 5173,
     proxy: {
-      // Fase 0 LAN: redirigible con VITE_API_PROXY (default backend local).
+      // LAN: overridable with VITE_API_PROXY (default local backend).
       '/api': process.env.VITE_API_PROXY ?? 'http://localhost:8000',
     },
   },

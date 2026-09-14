@@ -22,8 +22,8 @@ export function Settings() {
   useEffect(() => {
     setLoading(true)
     settingsApi.get().then(r => {
-      // Solo claves del store: el DTO trae id/user_id/updated_at/language
-      // que no pertenecen al estado local (antes se volcaba todo).
+      // Store keys only: the DTO carries id/user_id/updated_at/language
+      // which don't belong to local state (it used to dump everything).
       const { primary_color, font_family, font_size_px, table_density, grid_columns,
         show_summary, rounded_borders, pastel_mode, visible_fields, table_header_bg } = r ?? {}
       settings.set({

@@ -11,8 +11,8 @@ export function RowMenu({ row, idx, total, onMove, onDelete, onMarkRow }: { row:
   const ref = useRef<HTMLDivElement>(null)
   const trigRef = useRef<HTMLButtonElement>(null)
   const menuPos = useFloatPos(trigRef, open, 190, ref, 320)
-  // Pantalla chica o táctil: el menú flota como bottom-sheet (inmune a
-  // portales mal posicionados tras scroll/zoom en Chromium móvil).
+  // Small screen or touch: the menu floats as a bottom-sheet (immune to
+  // portals mispositioned after scroll/zoom in mobile Chromium).
   const small = typeof window !== "undefined" && (window.matchMedia?.("(hover: none)").matches || window.innerWidth < 1024)
   useEffect(() => {
     if (!open) return

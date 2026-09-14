@@ -37,7 +37,7 @@ class Cell(Base):
     note: Mapped[str | None] = mapped_column(String, nullable=True)
     color: Mapped[str | None] = mapped_column(
         String, nullable=True
-    )  # hex por check, fallback a config
+    )  # hex per check, falls back to config
     style: Mapped[dict | None] = mapped_column(
         JSON, nullable=True
     )  # {bold, italic, underline, align, fontFamily}

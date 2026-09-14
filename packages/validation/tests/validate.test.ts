@@ -8,7 +8,7 @@ import {
   validateStaffNames,
 } from "../src/index";
 
-describe("vectores compartidos con backend", () => {
+describe("vectors shared with backend", () => {
   test("missingCompany", () => {
     for (const v of vectors.missingCompany) {
       expect(findRowsMissingCompany(v.rows as never)).toEqual(v.expected);

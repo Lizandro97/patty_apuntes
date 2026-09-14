@@ -54,7 +54,7 @@ export function Register() {
                   <label htmlFor="reg-password" className="text-xs font-medium tracking-wide text-[var(--text)]">{t("auth.register.password")}</label>
                   <div className="relative">
                     <Input id="reg-password" placeholder="••••••••" type={showPw ? "text" : "password"} autoComplete="new-password" {...register("password")} aria-invalid={!!errors.password} className="h-11 rounded-full pr-11" />
-                    <button type="button" onClick={() => setShowPw(v => !v)} aria-label={showPw ? "Ocultar contraseña" : "Mostrar contraseña"} aria-pressed={showPw} className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 grid place-items-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)]">
+                    <button type="button" onClick={() => setShowPw(v => !v)} aria-label={t(showPw ? "auth.register.hidePassword" : "auth.register.showPassword")} aria-pressed={showPw} className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 grid place-items-center rounded-full text-[var(--text-dim)] hover:text-[var(--text)]">
                       {showPw ? <EyeOff size={16}/> : <Eye size={16}/>}
                     </button>
                   </div>

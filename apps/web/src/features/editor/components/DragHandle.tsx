@@ -1,7 +1,7 @@
 import { useRef, useState } from "react"
 
 // Draggable Excel-style handle on the grid lines.
-// axis x = borde derecho (ancho de columna), axis y = borde inferior (alto de row).
+// axis x = right edge (column width), axis y = bottom edge (row height).
 // Reports hover and drag to paint the full-length guide (one same column/row).
 export function DragHandle({ axis, title, zoom, startV, min, onV, onReset, onHover, onDrag }: {
   axis: "x" | "y"; title: string; zoom: number; startV: number; min: number;
@@ -10,7 +10,7 @@ export function DragHandle({ axis, title, zoom, startV, min, onV, onReset, onHov
 }) {
   const st = useRef<{ p: number; v: number; dragging: boolean } | null>(null)
   const [on, setOn] = useState(false)
-  // Táctil: doble-tap sobre el handle = reset (el dblclick de PC no existe).
+  // Touch: double-tap on the handle = reset (no PC dblclick exists).
   const lastTap = useRef(0)
   const end = (notify = true, countTap = false) => {
     const was = st.current !== null
@@ -49,8 +49,8 @@ export function DragHandle({ axis, title, zoom, startV, min, onV, onReset, onHov
       onMouseLeave={() => onHover?.(false)}
       onDoubleClick={(e) => { e.stopPropagation(); onReset() }}
       onPointerDown={(e) => {
-        // Solo registrar: el preventDefault/captura van al superar el umbral
-        // (ver onPointerMove). Así un tap sobre el handle llega como click.
+        // Only register: preventDefault/capture kick in past the threshold
+        // (see onPointerMove). This way a tap on the handle lands as a click.
         const parent = (e.currentTarget as HTMLElement).parentElement
         const rect = parent?.getBoundingClientRect()
         const measured = rect ? (axis === "x" ? rect.width : rect.height) / (zoom || 1) : 0
@@ -62,7 +62,7 @@ export function DragHandle({ axis, title, zoom, startV, min, onV, onReset, onHov
         if (!s) return
         const d = ((axis === "x" ? e.clientX : e.clientY) - s.p) / (zoom || 1)
         if (!s.dragging) {
-          if (Math.abs(d) < 6) return // umbral táctil: aún puede ser un tap
+          if (Math.abs(d) < 6) return // touch threshold: may still be a tap
           s.dragging = true;
           (e.target as HTMLElement).setPointerCapture(e.pointerId)
           setOn(true)

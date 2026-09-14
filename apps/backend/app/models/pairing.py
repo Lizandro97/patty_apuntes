@@ -8,7 +8,7 @@ from app.db.session import Base
 
 
 class PairingToken(Base):
-    """Token de pareo de un solo uso (QR en PC -> movil). Expira en 10 min."""
+    """Single-use pairing token (QR on PC -> phone). Expires in 10 min."""
 
     __tablename__ = "pairing_tokens"
     token: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))

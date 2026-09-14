@@ -8,7 +8,7 @@ from app.db.session import Base
 
 
 class Device(Base):
-    """Dispositivos pareados (Fase 2: tabla; pairing/revoke en Fases 3A/4)."""
+    """Paired devices."""
 
     __tablename__ = "devices"
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))

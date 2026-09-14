@@ -1,4 +1,4 @@
-"""Fase 4: filenames {slug}-{fecha} sanitizados, sin path traversal."""
+"""Fase 4: sanitized {slug}-{date} filenames, no path traversal."""
 
 from app.export.filenames import export_filename, slugify
 from tests.conftest import auth_headers, client
@@ -18,7 +18,7 @@ def test_export_filename_shape():
     assert export_filename("T", "xlsx").endswith(".xlsx")
 
 
-def test_export_content_disposition_uses_slug_fecha():
+def test_export_content_disposition_uses_slug_date():
     h = auth_headers("fn@t.com")
     rid = client.post(
         "/api/records",

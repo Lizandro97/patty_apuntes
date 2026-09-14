@@ -26,7 +26,9 @@ def create(
         db.refresh(e)
     except Exception as e2:
         db.rollback()
-        raise HTTPException(400, {"code": "COMPANY_EXISTS", "message": "Company ya existe"}) from e2
+        raise HTTPException(
+            400, {"code": "COMPANY_EXISTS", "message": "Company already exists"}
+        ) from e2
     return e
 
 

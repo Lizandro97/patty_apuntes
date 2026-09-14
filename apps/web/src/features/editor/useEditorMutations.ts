@@ -1,8 +1,8 @@
-/** Escrituras del editor (Corte 3): las 9 mutaciones + mutErr.
+/** Editor writes (Cut 3): the 9 mutations + mutErr.
  *
- *  Movimiento verbatim desde pages/Editor.tsx — mismos optimistic updates,
- *  mismos invalidates, mismo mutErr. Las dependencias de la página entran
- *  por parámetro para no acoplarse a ella.
+ *  Verbatim move from pages/Editor.tsx — same optimistic updates,
+ *  same invalidates, same mutErr. Page dependencies come in
+ *  as parameters so the hook never couples to the page.
  */
 import { useMutation, type QueryClient } from "@tanstack/react-query"
 import { apiError } from "@/lib/errors"
@@ -37,8 +37,8 @@ export type EditorMutationsDeps = {
 
 export function useEditorMutations(d: EditorMutationsDeps) {
   const { recordId, isDraft, qc, persist, pushHistory, setHeaderDirty } = d
-  // Errores de guardado antes silenciosos (best-effort): ahora toast con código.
-  // Es la única señal cuando un tap no persiste (p. ej. túnel caído).
+  // Save errors once silent (best-effort): now a toast with code.
+  // The only signal when a tap doesn't persist (e.g. dead tunnel).
   const mutErr = (e: any) => {
     const detail = e?.response?.data?.detail
     const code = detail?.code ? ` (${detail.code})` : e?.response ? ` (${e.response.status})` : ""

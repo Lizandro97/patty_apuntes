@@ -140,37 +140,37 @@ body {
 .table-normal td:not(.p-0), .table-normal th:not(.p-0) { padding: 8px 12px; }
 .table-comfortable td:not(.p-0), .table-comfortable th:not(.p-0) { padding: 12px 16px; }
 
-/* Controles nativos (spinners de number, etc.) siguen el tema */
+/* Native controls (number spinners, etc.) follow the theme */
 input[type="number"] {
   accent-color: var(--accent);
 }
 
-/* Táctil: en controles interactivos desactiva el doble-tap-zoom del navegador
-   (los taps llegaban tarde o se interpretaban como gesto de zoom, y en
-   Chromium móvil se mapeaban a coordenadas erróneas dentro de la hoja). */
+/* Touch: on interactive controls disable the browser's double-tap zoom
+   (taps arrived late or parsed as zoom gestures, and on mobile
+   Chromium they mapped to wrong coordinates inside the sheet). */
 button, input, label, select, textarea,
 [role="button"], [role="menuitem"], [role="option"] {
   touch-action: manipulation;
 }
 
-/* Contenedor de scroll de la tabla del editor: paneo nativo en ambos ejes
-   sin encadenar el scroll horizontal al canvas exterior. */
+/* Editor table scroll container: native pan on both axes
+   without chaining horizontal scroll to the outer canvas. */
 .sheet-scroll {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
   touch-action: pan-x pan-y;
 }
 
-/* Táctil: el thead sticky dentro de scrolls anidados desfasa el hit-test en
-   Chromium móvil (los taps solo llegaban en la franja izquierda del viewport).
-   En táctil el header deja de ser fijo; en desktop con hover sigue sticky. */
+/* Touch: sticky thead inside nested scrollers skews hit-testing on
+   mobile Chromium (taps only landed on the viewport's left strip).
+   On touch the header stops being fixed; on hover-capable desktop it stays sticky. */
 @media (hover: none) {
   .sheet-scroll thead {
     position: static;
   }
 }
 
-/* Steppers propios: ocultar spinners nativos (solo UI del tema) */
+/* Custom steppers: hide native spinners (theme UI only) */
 input.themed-number::-webkit-outer-spin-button,
 input.themed-number::-webkit-inner-spin-button {
   -webkit-appearance: none;

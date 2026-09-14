@@ -1,11 +1,11 @@
 import axios from "axios"
 import { useAuthStore } from "@/stores/auth"
 
-/** Evento SPA para expirar sesión sin hard-reload (App lo escucha). */
+/** SPA event to expire the session without a hard reload (App listens). */
 export const AUTH_LOGOUT_EVENT = "auth:logout"
 
-// Fase 0/4 LAN: en build se puede fijar VITE_API_URL (p. ej.
-// http://foliora.local:8000/api); por defecto mismo origen /api.
+// LAN: in build you can pin VITE_API_URL (e.g.
+// http://foliora.local:8000/api); same-origin /api by default.
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? "/api",
 })
@@ -19,7 +19,7 @@ api.interceptors.request.use((config) => {
 function logout() {
   useAuthStore.getState().logout()
   if (location.pathname !== "/login" && location.pathname !== "/register") {
-    // Navegación SPA vía App (sin hard-reload que pierde estado).
+    // SPA navigation via App (no hard reload that would lose state).
     window.dispatchEvent(new CustomEvent(AUTH_LOGOUT_EVENT))
   }
 }
@@ -34,7 +34,7 @@ api.interceptors.response.use(
       !orig.retried &&
       !orig.url?.includes("/auth/")
     ) {
-      // Fase 4: access corto (15 min) -> intenta refresh una vez antes de salir.
+      // Short-lived access (15 min) -> try refresh once before signing out.
       orig.retried = true
       try {
         const rt = localStorage.getItem("refresh_token")

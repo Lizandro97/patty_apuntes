@@ -103,8 +103,8 @@ export function fromServerParts(parts: {
   };
 }
 
-/** Reasigna `payload.rows` por posicion (duplicar archivo, backend records.py).
- * Claves que no son filas (p. ej. "header") se conservan tal cual. */
+/** Reassigns `payload.rows` by position (duplicate record, backend records).
+ * Non-row keys (e.g. "header") are preserved as-is. */
 export function remapLayoutRows(
   payload: { rows?: Record<string, unknown> } & Record<string, unknown>,
   oldRows: { id: string; position: number }[],

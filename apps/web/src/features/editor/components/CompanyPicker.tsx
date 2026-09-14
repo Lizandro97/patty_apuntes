@@ -17,11 +17,10 @@ export function CompanyPicker({ row, companies, anchorRef, onSelect, onClose }: 
     return () => { document.removeEventListener("mousedown", h); document.removeEventListener("keydown", k) }
   }, [onClose])
   const filtered = companies.filter((e: any) => e.name.toLowerCase().includes(q.toLowerCase()))
-  // Táctil: bottom-sheet inmune a mala posición de portales y al teclado
-  // (useFloatPos usa el viewport de layout, no el visual). Sin autoFocus.
-  // Se decide por capacidad táctil O por ancho: en móvil con "vista de
-  // escritorio" el hover:none no matchea y el portal flotante quedaría
-  // fuera de pantalla.
+  // Touch: bottom-sheet immune to bad portal placement and the keyboard
+  // (useFloatPos uses the layout viewport, not the visual one). No autoFocus.
+  // Decided by touch capability OR width: on mobile with "desktop view"
+  // hover:none doesn't match and the floating portal would land off-screen.
   const coarse = typeof window !== "undefined" && (window.matchMedia?.("(hover: none)").matches || window.innerWidth < 1024)
   if (coarse) return createPortal(
     <>

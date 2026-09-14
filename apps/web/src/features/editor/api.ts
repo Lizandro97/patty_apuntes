@@ -1,7 +1,7 @@
-/** Capa data del editor (Corte 1): todas las llamadas HTTP del Editor.
+/** Editor data layer (Cut 1): every HTTP call of the Editor.
  *
- *  Movimiento verbatim desde pages/Editor.tsx — misma URL, mismo body,
- *  misma respuesta. La página solo cambia el call-site.
+ *  Verbatim move from pages/Editor.tsx — same URL, same body,
+ *  same response. The page only changes the call-site.
  */
 import { api } from "@/lib/api"
 
@@ -14,7 +14,7 @@ export type CellBody = {
 }
 
 export const editorApi = {
-  // ---- lecturas ----
+  // ---- reads ----
   getRecord: async (id: string) => (await api.get(`/records/${id}`)).data,
   getRows: async (id: string) => (await api.get(`/records/${id}/rows`)).data,
   getCells: async (id: string) => (await api.get(`/records/${id}/cells`)).data,
@@ -22,7 +22,7 @@ export const editorApi = {
   getCompanies: async () => (await api.get("/companies")).data,
   getDesign: async (id: string) => (await api.get(`/records/${id}/layout`)).data,
 
-  // ---- celdas ----
+  // ---- cells ----
   setCell: async (cellId: string, body: CellBody) =>
     (await api.put(`/records/cells/${cellId}`, body)).data,
   bulkCells: async (
@@ -30,7 +30,7 @@ export const editorApi = {
     body: { ids: string[]; reviewed: boolean; color: string },
   ) => (await api.post(`/records/${recordId}/cells/bulk`, body)).data,
 
-  // ---- filas ----
+  // ---- rows ----
   addRow: async (recordId: string, payload: Record<string, unknown>) =>
     (await api.post(`/records/${recordId}/rows`, payload)).data,
   updateRow: async (recordId: string, rowId: string, patch: Record<string, unknown>) =>
@@ -40,7 +40,7 @@ export const editorApi = {
   reorderRows: async (recordId: string, ids: string[]) =>
     api.post(`/records/${recordId}/rows/reorder`, { ids }),
 
-  // ---- archivo ----
+  // ---- record ----
   patchRecord: async (recordId: string, patch: Record<string, unknown>) =>
     (await api.put(`/records/${recordId}`, patch)).data,
   createRecord: async (payload: Record<string, unknown>) =>

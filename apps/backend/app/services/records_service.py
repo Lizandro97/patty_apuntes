@@ -1,8 +1,8 @@
-"""Servicio de dominio para archivos (records): filas, celdas, escala, progreso.
+"""Domain service for files (records): rows, cells, scale, progress.
 
-Movido verbatim desde routers/records.py (Fase A) con dos optimizaciones
-solo-lectura: _ensure_cells y row_stats usan consultas agrupadas en vez de
-N+1. El comportamiento observable no cambia.
+Moved verbatim from routers/records.py (Fase A) with two read-only
+optimizations: _ensure_cells and row_stats use grouped queries instead
+of N+1. No observable behavior change.
 """
 
 from fastapi import HTTPException
@@ -19,7 +19,7 @@ from app.validation.rules import find_rows_missing_company
 
 
 def calc_progress(reviewed: int, total: int) -> int:
-    # Alineado con Math.round del frontend (half-up): 2/3 -> 67 en ambos.
+    # Aligned with the frontend's Math.round (half-up): 2/3 -> 67 on both.
     if not total:
         return 0
     return int(reviewed * 100 / total + 0.5)
@@ -42,7 +42,7 @@ def recalc_progress(db: Session, record_id: str):
 
 
 def row_stats(db: Session, record_id: str) -> tuple[int, int, int]:
-    """(total_rows, reviewed_rows, pending_rows) con 1 query agregada (sin N+1)."""
+    """(total_rows, reviewed_rows, pending_rows) with 1 aggregate query (no N+1)."""
     agg = (
         db.query(
             Cell.row_id,
@@ -97,8 +97,8 @@ def _missing_cell_keys(
 
 
 def ensure_cells(db: Session, record: Record, rows: list[RecordRow]):
-    # create missing cells per row — months work with or without empresa.
-    # 1 sola query para detectar faltantes (antes: 1 query por celda, N+1).
+    # create missing cells per row — months work with or without company.
+    # Single query to find gaps (was: 1 query per cell, N+1).
     years = list(range(record.period_start, record.period_end + 1))
     if not rows or not years:
         return
@@ -125,7 +125,7 @@ def sync_scale(db: Session, record: Record, old_start: int, old_end: int):
         Cell.record_id == record.id,
         (Cell.year < record.period_start) | (Cell.year > record.period_end),
     ).delete(synchronize_session=False)
-    # add missing years for each row (deteccion en bulk, sin N+1)
+    # add missing years for each row (bulk detection, no N+1)
     rows = db.query(RecordRow).filter(RecordRow.record_id == record.id).all()
     new_years = [
         y for y in range(record.period_start, record.period_end + 1) if y < old_start or y > old_end
@@ -148,11 +148,11 @@ def sync_scale(db: Session, record: Record, old_start: int, old_end: int):
 
 
 def ensure_live(db: Session, record: Record) -> list[RecordRow]:
-    """Ensure por defecto + touch solo si realmente creo filas/celdas.
+    """Default ensure + touch only if it actually created rows/cells.
 
-    Los GET que materializan defaults (list_rows/cells/stats/export) tambien
-    generan datos sync-visibles: sin touch el pull los perderia.
-    Deuda conocida: escribe en GET; solo materializa defaults, nunca edita.
+    GETs that materialize defaults (list_rows/cells/stats/export) also
+    produce sync-visible data: without touch, pull would lose it.
+    Known debt: writes on GET; only materializes defaults, never edits.
     """
     rows_before = (
         db.query(func.count(RecordRow.id)).filter(RecordRow.record_id == record.id).scalar() or 0
@@ -197,11 +197,11 @@ def missing_fields(rows: list[RecordRow]) -> list[dict]:
 
 
 def remap_layout_rows(payload: dict, rows: list[RecordRow], new_rows: list[RecordRow]) -> dict:
-    """Reasigna alturas por position; claves no-fila (ej. header) intactas.
+    """Reassign heights by position; non-row keys (e.g. header) untouched.
 
-    Alineado con packages/document-model remapLayoutRows: los ids obsoletos
-    dentro de `rows` se descartan (no referencian filas existentes); las
-    claves no-fila de nivel superior (ej. header) se conservan.
+    Aligned with packages/document-model remapLayoutRows: stale ids
+    inside `rows` are dropped (they reference no existing rows);
+    top-level non-row keys (e.g. header) are preserved.
     """
     if not isinstance(payload.get("rows"), dict):
         return payload

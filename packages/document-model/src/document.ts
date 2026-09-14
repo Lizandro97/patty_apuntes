@@ -1,5 +1,5 @@
-// Modelo canonico Foliora (ARCHITECTURE.md §2). Independiente de React/RN.
-// sections == filas, content == celdas mensuales, layout == diseno visual.
+// Canonical Foliora model. Framework-independent.
+// sections == rows, content == monthly cells, layout == visual design.
 
 export type SyncStatus = "clean" | "dirty" | "pending" | "conflict";
 

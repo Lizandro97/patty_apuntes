@@ -1,6 +1,6 @@
-"""DTOs de preferencias de usuario (Fase A: ubicacion propia).
+"""User preference DTOs (Fase A: own location).
 
-Re-exportados desde app.schemas.record por compatibilidad.
+Re-exported from app.schemas.record for compatibility.
 """
 
 from pydantic import BaseModel, ConfigDict

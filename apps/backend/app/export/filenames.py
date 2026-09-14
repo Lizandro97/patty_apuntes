@@ -1,6 +1,6 @@
-"""Filenames sanitizados (espejo de frontend/lib/filenames.ts y movil).
+"""Sanitized filenames (mirror of frontend/lib/filenames.ts).
 
-{slug}-{yyyy-mm-dd}.{ext}: sin path traversal, sin colisiones por id.
+{slug}-{yyyy-mm-dd}.{ext}: no path traversal, no id collisions.
 """
 
 import re

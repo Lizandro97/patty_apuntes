@@ -77,8 +77,8 @@ export function Records() {
       push({ kind: "success", title: t("common.exportOk") })
     } catch (e: any) {
       const d = e?.response?.data?.detail
-      if (e?.response?.status === 422 && d?.faltantes) {
-        push({ kind: "error", title: t("records.exportMissingTitle"), desc: d.faltantes.map((f: any) => `• ${t("records.exportRowMissing", { row: f.row, name: f.name })}`).join("\n") })
+      if (e?.response?.status === 422 && d?.missing) {
+        push({ kind: "error", title: t("records.exportMissingTitle"), desc: d.missing.map((f: any) => `• ${t("records.exportRowMissing", { row: f.row, name: f.name })}`).join("\n") })
       } else {
         push({ kind: "error", title: t("common.exportError"), actionLabel: t("common.retry"), onAction: () => download(rec, fmt) })
       }

@@ -12,7 +12,7 @@ export function Inicio() {
   const { t, i18n } = useTranslation()
   const { data: recordsData, isPending: recPending, isError: recError, refetch: recRefetch } = useQuery({ queryKey: queryKeys.records, queryFn: recordsApi.list })
   const { data: companies } = useQuery({ queryKey: queryKeys.companies, queryFn: companiesApi.list })
-  // Fase 4: badge honesto desde el servidor (revision global real).
+  // Honest badge from the server (real global revision).
   const { data: syncStatus, isPending: syncPending, isError: syncError, refetch: syncRefetch } = useQuery({ queryKey: queryKeys.syncStatus, queryFn: syncApi.status })
   const list = recordsData ?? []
   const total = list.length

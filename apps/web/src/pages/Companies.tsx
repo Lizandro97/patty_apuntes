@@ -27,7 +27,7 @@ export function Companies() {
     return () => document.removeEventListener("keydown", k)
   }, [editRec, delRec])
   const all: Company[] = data ?? []
-  // Buscar solo tiene sentido con 2+ registros; con 0-1 el campo es solo-agregar
+  // Search only makes sense with 2+ records; with 0-1 the field is add-only
   const searchActive = all.length >= 2
   const shown = searchActive ? all.filter((e)=> (e.name ?? "").toLowerCase().includes(q.toLowerCase())) : all
   const trimmed = q.trim()

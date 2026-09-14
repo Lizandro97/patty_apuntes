@@ -1,9 +1,9 @@
-// Escala de anos (espejo de _ensure_cells/_sync_scale).
+// Year scale (mirror of ensure_cells/sync_scale).
 
-/** Ancho maximo permitido de rango (records.py: SCALE_TOO_WIDE). */
+/** Max allowed range width (records: SCALE_TOO_WIDE). */
 export const MAX_SCALE_YEARS = 20;
 
-/** Anos incluidos en [start, end]. Vacio si el rango es invalido. */
+/** Years included in [start, end]. Empty when the range is invalid. */
 export function rangeYears(start: number, end: number): number[] {
   if (!Number.isInteger(start) || !Number.isInteger(end) || start > end) return [];
   const out: number[] = [];

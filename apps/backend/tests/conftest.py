@@ -1,6 +1,6 @@
-"""Aislamieto Fase 0: DB sqlite temporal via env ANTES de importar la app.
+"""Fase 0 isolation: temp sqlite DB via env BEFORE importing the app.
 
-Sin esto, importar app.main ejecutaria el bloque destructivo contra patty.db real.
+Without this, importing app.main would run the destructive block against the real patty.db.
 """
 
 import os

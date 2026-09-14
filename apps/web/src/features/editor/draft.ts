@@ -1,8 +1,8 @@
-/** Borrador + reconciliación local→servidor (Corte 4).
+/** Draft + local→server reconciliation (Cut 4).
  *
- *  Movimiento verbatim desde pages/Editor.tsx — misma semántica de cache
- *  y de diff. Funciones puras sobre QueryClient; la página aporta qc,
- *  recordId, companies, t e idioma mediante parámetros.
+ *  Verbatim move from pages/Editor.tsx — same cache semantics
+ *  and diff. Pure functions over QueryClient; the page provides qc,
+ *  recordId, companies, t and language as parameters.
  */
 import type { QueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/shared/queryKeys"
@@ -101,19 +101,19 @@ export async function syncSnapshotToServer(
   },
 ) {
   const { force = false, localOnly, t, lang } = opts
-  if (localOnly && !force) return // undo/redo stays local until Guardar
+  if (localOnly && !force) return // undo/redo stays local until Save
   const tFilas: any[] = target.rows ?? []
   const sFilas: any[] = source.rows ?? []
   const tCeldas: any[] = target.cells ?? []
   const sCeldas: any[] = source.cells ?? []
-  // Archivo
+  // Record
   const ta = target.record as any, sa = source.record as any
   if (ta && sa) {
     const patch: any = {}
     for (const k of ["title", "review_type", "period_start", "period_end", "staff_count"]) {
       if (ta[k] !== sa[k] && ta[k] !== undefined) patch[k] = ta[k]
     }
-    // Arrays por valor (referencia siempre difiere): nombres del equipo.
+    // Arrays by value (reference always differs): team names.
     if (JSON.stringify(ta.staff_names ?? []) !== JSON.stringify(sa.staff_names ?? [])) {
       patch.staff_names = sanitizeStaffNames(ta.staff_names)
     }
@@ -130,7 +130,7 @@ export async function syncSnapshotToServer(
       try { await editorApi.patchRecord(recordId!, patch) } catch { /* best-effort */ }
     }
   }
-  // Filas eliminadas en target (sobran en servidor) -> DELETE
+  // Deleted rows in target (leftover on server) -> DELETE
   const tIds = new Set(tFilas.map((f: any) => f.id))
   const sIds = new Set(sFilas.map((f: any) => f.id))
   const recreatedOldIds = new Set<string>()
@@ -150,7 +150,7 @@ export async function syncSnapshotToServer(
         if (f.assignee) patch.assignee = f.assignee
         if (f.note) patch.note = f.note
         if (Object.keys(patch).length) await editorApi.updateRow(recordId!, created.id, patch)
-        // Restaurar checks de esa row (los recreados nacen sin revisar)
+        // Restore checks on that row (recreated ones are born unchecked)
         const want = tCeldas.filter((c: any) => c.row_id === f.id && c.reviewed)
         if (want.length) {
           const fresh = (await editorApi.getCells(recordId!)) as any[]
@@ -163,7 +163,7 @@ export async function syncSnapshotToServer(
       } catch { /* best-effort */ }
     }
   }
-  // Filas comunes con cambios -> PUT
+  // Common rows with changes -> PUT
   await Promise.all(tFilas.filter((f: any) => sIds.has(f.id)).map(async (f: any) => {
     const s = sFilas.find((x: any) => x.id === f.id)
     if (!s) return null

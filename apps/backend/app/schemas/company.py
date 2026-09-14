@@ -11,7 +11,7 @@ class CompanyCreate(BaseModel):
     def _clean(cls, v: str) -> str:
         v = v.strip()
         if not v:
-            raise ValueError("name vacio")
+            raise ValueError("empty name")
         return v
 
 
@@ -23,7 +23,7 @@ class CompanyUpdate(BaseModel):
     def _clean(cls, v: str) -> str:
         v = v.strip()
         if not v:
-            raise ValueError("name vacio")
+            raise ValueError("empty name")
         return v
 
 

@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Arranque no destructivo (Fase 0): crea tablas faltantes, conserva filas.
-    # Migraciones de esquema: Alembic desde Fase 2 (+ ALTER ligeros en init_db).
+    # Non-destructive startup (Fase 0): creates missing tables, keeps rows.
+    # Schema migrations: Alembic from Fase 2 (+ light ALTERs in init_db).
     init_db()
     yield
 
@@ -45,14 +45,14 @@ app.include_router(sync.router, prefix="/api")
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(
         status_code=422,
-        content={"code": "VALIDATION_ERROR", "message": "Datos invalidos", "errors": exc.errors()},
+        content={"code": "VALIDATION_ERROR", "message": "Invalid data", "errors": exc.errors()},
     )
 
 
 @app.exception_handler(SQLAlchemyError)
 async def db_exception_handler(request: Request, exc: SQLAlchemyError):
     logger.exception("Database error on %s", request.url.path)
-    return JSONResponse(status_code=500, content={"code": "DB_ERROR", "message": "Error interno"})
+    return JSONResponse(status_code=500, content={"code": "DB_ERROR", "message": "Internal error"})
 
 
 @app.get("/health", include_in_schema=False)

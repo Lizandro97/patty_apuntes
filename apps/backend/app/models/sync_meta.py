@@ -5,7 +5,7 @@ from app.db.session import Base
 
 
 class SyncMeta(Base):
-    """Contador global de revisiones (una sola fila id=1)."""
+    """Global revision counter (single row id=1)."""
 
     __tablename__ = "sync_meta"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)

@@ -102,10 +102,10 @@ def create_pairing(db: Session = Depends(get_db), user: User = Depends(get_curre
 
 @router.post("/devices/claim", response_model=ClaimOut)
 def claim_device(data: ClaimIn, db: Session = Depends(get_db)):
-    """Pareo publico por diseño (el dispositivo nuevo aun no tiene JWT).
+    """Public pairing by design (the new device has no JWT yet).
 
-    El pairing_token de un solo uso autentica la operacion y el dispositivo
-    queda vinculado al user_id dueño del token (multitenant).
+    The single-use pairing_token authenticates the operation and the device
+    is bound to the token owner's user_id (multitenant).
     """
     pt = db.get(PairingToken, data.pairing_token)
     now = datetime.now(UTC)

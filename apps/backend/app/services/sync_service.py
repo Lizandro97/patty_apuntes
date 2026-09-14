@@ -1,7 +1,7 @@
-"""Servicio de resolucion de conflictos sync (Fase A).
+"""Sync conflict resolution service (Fase A).
 
-Movido desde routers/sync.py: el router valida el strategy, el servicio
-ejecuta merge/mine/theirs contra el motor LWW.
+Moved from routers/sync.py: the router validates the strategy, the service
+executes merge/mine/theirs against the LWW engine.
 """
 
 from datetime import UTC, datetime
@@ -22,11 +22,11 @@ from app.sync.engine import (
 def resolve_conflict(
     db: Session, user_id: str, client_uuid: str, strategy: str, doc: dict | None
 ) -> dict:
-    """Resolucion explicita de un conflicto.
+    """Explicit conflict resolution.
 
-    merge: union filas + OR celdas + metadata del mas nuevo.
-    mine: el doc del cliente gana (se reestampa a ahora).
-    theirs: se conserva el servidor, sin cambios.
+    merge: row union + cell OR + newest metadata.
+    mine: the client doc wins (re-stamped to now).
+    theirs: the server is kept, no changes.
     """
     stored = (
         db.query(Record)
@@ -38,7 +38,7 @@ def resolve_conflict(
     if strategy == "theirs":
         return record_to_doc(db, stored)
     if not isinstance(doc, dict):
-        raise HTTPException(400, {"code": "RESOLVE_NEEDS_DOC", "message": "doc requerido"})
+        raise HTTPException(400, {"code": "RESOLVE_NEEDS_DOC", "message": "doc is required"})
     if strategy == "mine":
         forced = dict(doc)
         forced["updated_at"] = datetime.now(UTC).isoformat()

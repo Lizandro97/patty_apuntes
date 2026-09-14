@@ -35,6 +35,14 @@ Robin Wieruch feature-architecture, Vercel microfrontends verticales
   queda como alias legacy oculto.
 - CI (`.github/workflows/ci.yml`): backend ruff+pytest, packages bun test,
   web oxlint+bun test+build.
+- Idioma del código: todo `apps/web`, `apps/backend`, `packages/*` y tests
+  en inglés (comentarios, docstrings, mensajes, `ValueError`, `SyncInvalid`).
+  Solo visible al usuario en español: valores i18n, strings de export
+  (`Revisión…`), fallback de filename (`archivo`), y claves persistidas
+  que no se migran (`theme papel/tinta/menta`, `localStorage`). Los 35
+  códigos de error backend tienen clave en `es.json` + `en.json`, así
+  `apiError()` nunca muestra inglés crudo. Contrato export: `missing`
+  (antes `faltantes`). `docs/*.md` quedan en español.
 - oxlint en verde total (0 errores, 0 warnings): `no-unused-vars` y
   `no-shadow` como error; `no-map-spread`, `no-await-in-loop`,
   `no-array-sort` y `consistent-function-scoping` en `off` justificado
