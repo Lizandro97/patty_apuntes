@@ -19,6 +19,7 @@ import { Plus, Minus, Users, Calendar, Check, Save, Download, Eye, Undo2, Redo2,
 import { CompanyPicker, DragHandle, NumberStepper, PERSON_COLORS, RowMenu, RowTextCell, useFloatPos } from "@/features/editor/components"
 import { editorApi } from "@/features/editor/api"
 import { useEditorData } from "@/features/editor/useEditorData"
+import { useEditorMutations } from "@/features/editor/useEditorMutations"
 import { queryKeys } from "@/shared/queryKeys"
 
 const ZOOM_STEPS = [0.5, 0.6, 0.75, 1, 1.25, 1.5]
@@ -469,55 +470,6 @@ export function Editor() {
     document.addEventListener("keydown", h)
     return () => document.removeEventListener("keydown", h)
   }, [preview, selCell, recordId, rows, cells, record])
-  // Errores de guardado antes silenciosos (best-effort): ahora toast con código.
-  // Es la única señal cuando un tap no persiste (p. ej. túnel caído).
-  const mutErr = (e: any) => {
-    const detail = e?.response?.data?.detail
-    const code = detail?.code ? ` (${detail.code})` : e?.response ? ` (${e.response.status})` : ""
-    push({ kind: "error", title: `${apiError(t, detail ?? e?.message, "errors.fallback")}${code}` })
-  }
-  const toggle = useMutation({
-    mutationFn: async (c: any) => {
-      const myColor = PERSON_COLORS[activePerson] ?? ""
-      return persist(async () => {
-        if (!c.reviewed) return await editorApi.setCell(c.id, {reviewed: true, color: myColor })
-        const owner = PERSON_COLORS.indexOf(c.color ?? "")
-        if (owner !== activePerson) return await editorApi.setCell(c.id, {reviewed: true, color: myColor })
-        return await editorApi.setCell(c.id, {reviewed: false, color: "" })
-      })
-    },
-    onMutate: async (c: any) => {
-      const myColor = PERSON_COLORS[activePerson] ?? ""
-      const owner = PERSON_COLORS.indexOf(c?.color ?? "")
-      const action = !c?.reviewed ? "mark" : (owner !== activePerson ? "recolor" : "unmark")
-      const color = action === "unmark" ? "" : myColor
-      pushHistory(action === "mark" ? t("editor.history.markAs", { who: personName(staffNames, activePerson) }) : action === "recolor" ? t("editor.history.recolor", { from: personName(staffNames, owner), to: personName(staffNames, activePerson) }) : t("editor.history.unmark"))
-      setHeaderDirty(true)
-      await qc.cancelQueries({ queryKey: queryKeys.cells(recordId) })
-      const prev = qc.getQueryData(queryKeys.cells(recordId))
-      qc.setQueryData(queryKeys.cells(recordId), (old: any) => (old ?? []).map((x: any) => x.id === c.id ? { ...x, reviewed: action !== "unmark", color } : x))
-      return { prev }
-    },
-    onError: (e, _c, ctx: any) => { if (ctx?.prev) qc.setQueryData(queryKeys.cells(recordId), ctx.prev); mutErr(e) },
-    onSettled: () => { qc.invalidateQueries({ queryKey: queryKeys.cells(recordId) }); qc.invalidateQueries({ queryKey: queryKeys.stats(recordId) }) },
-  })
-  // Recolor the selected cell from the panel (stamps when empty, never unstamps)
-  const recolor = useMutation({
-    mutationFn: async ({ cellId, color }: { cellId: string; color: string }) => persist(() => editorApi.setCell(cellId, {reviewed: true, color })),
-    onMutate: async (v: { cellId: string; color: string }) => {
-      await qc.cancelQueries({ queryKey: queryKeys.cells(recordId) })
-      const prev = qc.getQueryData(queryKeys.cells(recordId))
-      const cur = ((prev as any[]) ?? []).find((x: any) => x.id === v.cellId)
-      const from = PERSON_COLORS.indexOf(cur?.color ?? "")
-      const to = PERSON_COLORS.indexOf(v.color)
-      pushHistory(cur?.reviewed ? t("editor.history.recolor", { from: from >= 0 ? personName(staffNames, from) : "", to: personName(staffNames, to) }) : t("editor.history.markAs", { who: personName(staffNames, to) }))
-      setHeaderDirty(true)
-      qc.setQueryData(queryKeys.cells(recordId), (old: any) => (old ?? []).map((x: any) => x.id === v.cellId ? { ...x, reviewed: true, color: v.color } : x))
-      return { prev }
-    },
-    onError: (e, _v, ctx: any) => { if (ctx?.prev) qc.setQueryData(queryKeys.cells(recordId), ctx.prev); mutErr(e) },
-    onSettled: () => { qc.invalidateQueries({ queryKey: queryKeys.cells(recordId) }); qc.invalidateQueries({ queryKey: queryKeys.stats(recordId) }) },
-  })
   // Draft: apply row/record operations to local cache (mirrors server semantics)
   const companyNameOf = (companyId?: string) =>
     ((companies as any[]) ?? []).find((e: any) => e.id === companyId)?.name ?? ""
@@ -548,13 +500,16 @@ export function Editor() {
   const draftApplyRecord = (patch: any) => {
     qc.setQueryData(queryKeys.record(recordId), (old: any) => ({ ...old, ...patch }))
   }
-  const addRow = useMutation({ mutationFn: async (p:any) => persist(() => editorApi.addRow(recordId!, p)), onMutate: (p: any) => { pushHistory(t("editor.history.addRow")); setHeaderDirty(true); if (isDraft) draftApplyRow(p) }, onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.rows(recordId) }); qc.invalidateQueries({ queryKey: queryKeys.cells(recordId) }) }, onError: mutErr })
-  const updateRow = useMutation({ mutationFn: async ({ rowId, patch }: { rowId: string; patch: any }) => persist(() => editorApi.updateRow(recordId!, rowId, patch)), onMutate: (v: any) => { pushHistory(v?.patch?.company_id !== undefined ? t("editor.history.changeCompany") : t("editor.history.editRow")); setHeaderDirty(true); if (isDraft) draftApplyRowPatch(v.rowId, v.patch) }, onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.rows(recordId) }); qc.invalidateQueries({ queryKey: queryKeys.cells(recordId) }) }, onError: mutErr })
-  const deleteRow = useMutation({ mutationFn: async (rowId: string) => persist(() => editorApi.deleteRow(recordId!, rowId)), onMutate: (rowId: string) => { pushHistory(t("editor.history.deleteRow")); setHeaderDirty(true); if (isDraft) draftDeleteRow(rowId) }, onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.rows(recordId) }); qc.invalidateQueries({ queryKey: queryKeys.design(recordId) }) }, onError: mutErr })
-  const applyScale = useMutation({ mutationFn: async () => persist(() => editorApi.patchRecord(recordId!, {period_start: Number(scaleStart), period_end: Number(scaleEnd) })), onMutate: () => { pushHistory(t("editor.history.changeScale")); setHeaderDirty(true); if (isDraft) draftApplyRecord({ period_start: Number(scaleStart), period_end: Number(scaleEnd) }) }, onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.record(recordId) }); qc.invalidateQueries({ queryKey: queryKeys.rows(recordId) }); qc.invalidateQueries({ queryKey: queryKeys.cells(recordId) }); qc.invalidateQueries({ queryKey: queryKeys.stats(recordId) }) }, onError: mutErr })
-  const updateStaff = useMutation({ mutationFn: async ({n, names}:{n:number;names?:string[]}) => persist(() => editorApi.patchRecord(recordId!, {staff_count: n, ...(names ? {staff_names: names} : {}) })), onMutate: ({n})=>{ pushHistory(t("editor.history.changeStaff")); setHeaderDirty(true); if (isDraft) draftApplyRecord({ staff_count: n }) }, onSuccess: (_d, {n}) => { qc.invalidateQueries({queryKey: queryKeys.record(recordId)}); if (personIdx >= n) { choosePerson(Math.max(0, n - 1)); push({ kind: "info", title: t("editor.panel.staffShrunk", { who: personName(staffNames, Math.max(0, n - 1)) }) }) } }, onError: mutErr })
-  const updateNames = useMutation({ mutationFn: async (names:string[]) => { const clean = sanitizeStaffNames(names); if (isDraft) { draftApplyRecord({ staff_names: clean }); return clean } return persist(() => editorApi.patchRecord(recordId!, {staff_names: clean})) }, onMutate: ()=>{ pushHistory(t("editor.history.changeNames")); setHeaderDirty(true) }, onSuccess: () => { qc.invalidateQueries({queryKey: queryKeys.record(recordId)}) }, onError: mutErr })
-  const saveType = (v:string) => { const txt = v.trim(); if (txt !== (record?.review_type ?? "")) { pushHistory(t("editor.history.changeType")); setHeaderDirty(true); if (isDraft) draftApplyRecord({ review_type: txt }); else persist(() => editorApi.patchRecord(recordId!,{review_type:txt}).then(()=>qc.invalidateQueries({queryKey: queryKeys.record(recordId)}))) } }
+  // Mutaciones (hook): consumen draft fns + push definidos arriba.
+  const { push } = useToast()
+  const staffNames: string[] = Array.isArray((record as any)?.staff_names) ? (record as any).staff_names : []
+  const activePerson = Math.min(personIdx, Math.max(0, (record?.staff_count ?? 1) - 1))
+  const { mutErr, toggle, recolor, addRow, updateRow, deleteRow, applyScale, updateStaff, updateNames, saveType } = useEditorMutations({
+    recordId, isDraft, qc, persist, pushHistory, setHeaderDirty,
+    draftApplyRow, draftApplyRowPatch, draftDeleteRow, draftApplyRecord,
+    personIdx, choosePerson, staffNames, activePerson, scaleStart, scaleEnd,
+    record, push, t,
+  })
   const isMutating = useIsMutating()
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle")
   const [validAlert, setValidAlert] = useState<any[] | null>(null)
@@ -585,7 +540,6 @@ export function Editor() {
   // required for save/export: every row needs a registered company (months can be filled freely)
   // Regla compartida con backend/movil: packages/validation (mismo codigo, mismos vectores).
   const missingCompany = () => findRowsMissingCompany(orderedRows)
-  const { push } = useToast()
   // A seeded empty row carries nothing to persist (no company/name/marks/text)
   const isPristineRow = (f: any, cellList: any[]) =>
     !f.company_id && !(f.name_snapshot ?? "").trim() && !(f.assignee ?? "").trim() && !(f.note ?? "").trim() &&
@@ -762,9 +716,7 @@ export function Editor() {
   const years=Array.from({length: record.period_end - record.period_start + 1}, (_,i)=>record.period_start+i)
   const monthSum = years.reduce((s: number, y: number) => s + MONTHS.reduce((a: number, _, mi: number) => a + (colWidths[monthKey(y, mi)] ?? MONTH_DEFAULT), 0), 0)
 
-  const staffNames: string[] = Array.isArray((record as any)?.staff_names) ? (record as any).staff_names : []
   const staffOpts = Array.from({length: record.staff_count||2},(_,i)=>personName(staffNames, i))
-  const activePerson = Math.min(personIdx, Math.max(0, (record?.staff_count ?? 1) - 1))
   const ownerOf = (color: string | null | undefined) => PERSON_COLORS.indexOf(color ?? "")
   const cellList: any[] = (cells as any[]) ?? []
   const selectedCell = selCell ? cellList.find((c: any) => c.row_id === selCell.rowId && c.year === selCell.year && c.month === selCell.month) : undefined
