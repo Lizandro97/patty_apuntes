@@ -10,20 +10,25 @@ import { Plus, Download, Trash2, Search, Pencil, X, ChevronDown } from "lucide-r
 import { defaultTitle, newRecordPayload } from "@/lib/defaults"
 import { useToast } from "@/lib/toast"
 import { downloadBlob, exportFilename } from "@/lib/filenames"
+import { queryKeys } from "@/shared/queryKeys"
+import { recordsApi } from "@/shared/api/records"
+import { fmtDate } from "@/shared/format"
+
+type RecordItem = { id: string; title: string; progress?: number; created_at?: string; updated_at?: string }
 
 export function Records() {
   const { t, i18n } = useTranslation()
   const qc = useQueryClient()
   const nav = useNavigate()
-  const { data, isPending, isError, refetch } = useQuery({ queryKey:["records"], queryFn: async()=> (await api.get("/records")).data })
+  const { data, isPending, isError, refetch } = useQuery({ queryKey: queryKeys.records, queryFn: recordsApi.list })
   const { push } = useToast()
   const [title,setTitle]=useState("")
   const [q,setQ]=useState("")
   const [sort,setSort]=useState<"date"|"progress"|"title">("date")
-  const [renameRec,setRenameRec]=useState<any|null>(null)
+  const [renameRec,setRenameRec]=useState<RecordItem|null>(null)
   const [renameTitle,setRenameTitle]=useState("")
-  const [dlRec,setDlRec]=useState<any|null>(null)
-  const [delRec,setDelRec]=useState<any|null>(null)
+  const [dlRec,setDlRec]=useState<RecordItem|null>(null)
+  const [delRec,setDelRec]=useState<RecordItem|null>(null)
   const [sortOpen,setSortOpen]=useState(false)
   const [sortPos,setSortPos]=useState<{top:number;left:number;width:number}|null>(null)
   const sortBtnRef=useRef<HTMLButtonElement|null>(null)
@@ -57,26 +62,19 @@ export function Records() {
   }, [dlRec, delRec, renameRec])
   const PAGE = 50
   const [page, setPage] = useState(0)
-  useEffect(() => setPage(0), [q, sort, (data as any[])?.length])
-  const filtered=((data as any[]) ?? []).filter((a:any)=> (a.title ?? "").toLowerCase().includes(q.toLowerCase())).sort((a:any,b:any)=> sort==="progress" ? ((b.progress??0)-(a.progress??0)) : sort==="title" ? String(a.title??"").localeCompare(String(b.title??"")) : String(b.created_at??"").localeCompare(String(a.created_at??"")))
+  useEffect(() => setPage(0), [q, sort, (data as RecordItem[])?.length])
+  const filtered=((data as RecordItem[]) ?? []).filter((a)=> (a.title ?? "").toLowerCase().includes(q.toLowerCase())).sort((a,b)=> sort==="progress" ? ((b.progress??0)-(a.progress??0)) : sort==="title" ? String(a.title??"").localeCompare(String(b.title??"")) : String(b.created_at??"").localeCompare(String(a.created_at??"")))
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE))
   const safePage = Math.min(page, pages - 1)
   const list = filtered.slice(safePage * PAGE, safePage * PAGE + PAGE)
-  const create = useMutation({ mutationFn: async()=> (await api.post("/records",{...newRecordPayload(), title: title || defaultTitle()})).data, onSuccess:(d)=> { qc.invalidateQueries({queryKey:["records"]}); setTitle(""); nav(`/editor/${d.id}`) } })
-  const rename = useMutation({ mutationFn: async({id,title}:{id:string;title:string})=> (await api.put(`/records/${id}`,{title})).data, onSuccess:()=> { qc.invalidateQueries({queryKey:["records"]}); setRenameRec(null) }, onError:()=> { push({ kind: "error", title: t("common.saveError"), actionLabel: t("common.retry"), onAction: ()=>renameTitle.trim() && renameRec && rename.mutate({id: renameRec.id, title: renameTitle.trim()}) }) } })
-  const del = useMutation({ mutationFn: async(id:string)=> api.delete(`/records/${id}`), onSuccess:()=> qc.invalidateQueries({queryKey:["records"]}) })
-  const fmtDate = (d?: string) => {
-    if (!d) return t("records.notUpdated")
+  const create = useMutation({ mutationFn: async()=> recordsApi.create({...newRecordPayload(), title: title || defaultTitle()}), onSuccess:(d)=> { qc.invalidateQueries({queryKey: queryKeys.records}); setTitle(""); nav(`/editor/${d.id}`) } })
+  const rename = useMutation({ mutationFn: ({id,title}:{id:string;title:string})=> recordsApi.rename(id, title), onSuccess:()=> { qc.invalidateQueries({queryKey: queryKeys.records}); setRenameRec(null) }, onError:()=> { push({ kind: "error", title: t("common.saveError"), actionLabel: t("common.retry"), onAction: ()=>renameTitle.trim() && renameRec && rename.mutate({id: renameRec.id, title: renameTitle.trim()}) }) } })
+  const del = useMutation({ mutationFn: (id:string)=> recordsApi.remove(id), onSuccess:()=> qc.invalidateQueries({queryKey: queryKeys.records}) })
+  const fmtUpdated = (d?: string) => d ? fmtDate(d, i18n.language) : t("records.notUpdated")
+  const download = async (rec: RecordItem, fmt:"pdf"|"excel") => {
     try {
-      return new Date(d).toLocaleDateString(i18n.language === "en" ? "en-US" : "es-PE")
-    } catch {
-      return d
-    }
-  }
-  const download = async (rec:any, fmt:"pdf"|"excel") => {
-    try {
-      const r = await api.get(`/records/${rec.id}/export?format=${fmt}&lang=${i18n.language}`, { responseType:"blob" })
-      downloadBlob(r.data, exportFilename(rec.title ?? t("records.downloadBase"), fmt === "pdf" ? "pdf" : "xlsx"))
+      const blob = await recordsApi.exportBlob(rec.id, fmt, i18n.language)
+      downloadBlob(blob, exportFilename(rec.title ?? t("records.downloadBase"), fmt === "pdf" ? "pdf" : "xlsx"))
       push({ kind: "success", title: t("common.exportOk") })
     } catch (e: any) {
       const d = e?.response?.data?.detail
@@ -149,7 +147,7 @@ export function Records() {
                       <span className="text-xs font-bold text-[var(--accent)]">{a.progress ?? 0}%</span>
                     </span>
                   </td>
-                  <td className="p-3 text-xs text-[var(--text-dim)] whitespace-nowrap">{fmtDate(a.updated_at)}</td>
+                  <td className="p-3 text-xs text-[var(--text-dim)] whitespace-nowrap">{fmtUpdated(a.updated_at)}</td>
                   <td className="p-3 text-center whitespace-nowrap">
                     <span className="inline-flex gap-1.5 justify-center items-center">
                       <Button variant="outline" onClick={()=>{ setRenameRec(a); setRenameTitle(a.title) }} title={t("records.rename")} aria-label={t("records.renameFileAria")} aria-haspopup="dialog" className="min-w-[44px] min-h-[44px] p-0 shrink-0 bg-[var(--bg)] border-[var(--border)] text-[var(--text-dim)] hover:text-[var(--text)]"><Pencil size={16}/></Button>

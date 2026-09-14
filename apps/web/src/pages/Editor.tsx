@@ -1,8 +1,7 @@
 import { useQuery, useMutation, useQueryClient, useIsMutating } from "@tanstack/react-query"
-import { api } from "@/lib/api"
 import { apiError } from "@/lib/errors"
 import { useNavigate, useParams } from "react-router-dom"
-import { useEffect, useLayoutEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import i18n from "@/i18n"
@@ -16,300 +15,10 @@ import { currentYear } from "@/lib/defaults"
 import { findRowsMissingCompany, personName, sanitizeStaffNames } from "@foliora/validation"
 import { useToast } from "@/lib/toast"
 import { downloadBlob, exportFilename } from "@/lib/filenames"
-import { Plus, Minus, Trash2, ArrowUp, ArrowDown, Users, Calendar, Check, Save, Download, Eye, Undo2, Redo2, Settings2, FileText, Table2, Palette, RectangleVertical, RectangleHorizontal, PanelRightClose, PanelRightOpen, ChevronUp, ChevronDown, Menu, Pencil, X } from "lucide-react"
-
-// Per-person color (P1..Pn index). Fixed distinguishable colorblind-safe palette;
-// the sheet is always light, so it works across all 3 themes.
-export const PERSON_COLORS = [
-  "#0072B2", "#E69F00", "#009E73", "#D55E00", "#CC79A7",
-  "#56B4E9", "#B58900", "#8B5CF6", "#10B981", "#999999",
-]
-
-// Floating overlay: portal to body + fixed position so dropdowns float above
-// the scrollable sheet instead of being clipped by it. Anchored to the trigger,
-// flips up when there is no room below, clamps to the viewport, follows scroll.
-function useFloatPos(anchor: React.RefObject<HTMLElement | null>, open: boolean, w: number, menuRef?: React.RefObject<HTMLElement | null>, estH = 320, align: "left" | "right" = "left") {
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
-  useLayoutEffect(() => {
-    if (!open) { setPos(null); return }
-    const place = () => {
-      const el = anchor.current
-      if (!el) return
-      const r = el.getBoundingClientRect()
-      const vw = window.innerWidth, vh = window.innerHeight
-      // Real menu height when mounted; falls back to the estimate on first paint
-      const h = menuRef?.current?.offsetHeight || estH
-      const wantLeft = align === "right" ? r.right - w : r.left
-      const left = Math.max(8, Math.min(wantLeft, vw - w - 8))
-      const below = r.bottom + 8
-      const top = below + h + 8 <= vh ? below : Math.max(8, r.top - h - 8)
-      setPos({ top, left })
-    }
-    place()
-    // Re-place once mounted so the measured (not estimated) height applies
-    const raf = requestAnimationFrame(place)
-    window.addEventListener("scroll", place, true)
-    window.addEventListener("resize", place)
-    return () => { cancelAnimationFrame(raf); window.removeEventListener("scroll", place, true); window.removeEventListener("resize", place) }
-  }, [open, anchor, w, menuRef, estH, align])
-  return pos
-}
-
-function CompanyPicker({ row, companies, anchorRef, onSelect, onClose }: { row: any; companies: any[]; anchorRef: React.RefObject<HTMLButtonElement | null>; onSelect: (v: { company_id?: string }) => void; onClose: () => void }) {
-  const { t } = useTranslation()
-  const [q, setQ] = useState("")
-  const ref = useRef<HTMLDivElement>(null)
-  const pos = useFloatPos(anchorRef, true, 280, ref, 300)
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose() }
-    const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose() }
-    document.addEventListener("mousedown", h)
-    document.addEventListener("keydown", k)
-    return () => { document.removeEventListener("mousedown", h); document.removeEventListener("keydown", k) }
-  }, [onClose])
-  const filtered = companies.filter((e: any) => e.name.toLowerCase().includes(q.toLowerCase()))
-  // Táctil: bottom-sheet inmune a mala posición de portales y al teclado
-  // (useFloatPos usa el viewport de layout, no el visual). Sin autoFocus.
-  // Se decide por capacidad táctil O por ancho: en móvil con "vista de
-  // escritorio" el hover:none no matchea y el portal flotante quedaría
-  // fuera de pantalla.
-  const coarse = typeof window !== "undefined" && (window.matchMedia?.("(hover: none)").matches || window.innerWidth < 1024)
-  if (coarse) return createPortal(
-    <>
-      <div className="fixed inset-0 z-[65] bg-black/60" onClick={onClose} aria-hidden />
-      <div ref={ref} role="listbox" aria-label={t("editor.table.searchCompanyAria")} className="fixed inset-x-0 bottom-0 z-[70] max-h-[70dvh] flex flex-col bg-white border-t border-[var(--sheet-border)] rounded-t-2xl shadow-[0_-12px_32px_rgba(132,24,67,0.15)] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <Input aria-label={t("editor.table.searchCompanyAria")} placeholder={t("editor.table.searchCompanyPh")} value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{ if(e.key==="Escape") onClose() }} className="h-11 text-base mb-2 bg-[var(--sheet-soft)] border-[var(--sheet-border)] text-[#1e293b] placeholder:text-[var(--text-dim)]" />
-        <div className="overflow-auto space-y-1">
-          {filtered.map((e:any)=>(<button key={e.id} role="option" aria-selected={row.company_id===e.id} onClick={()=>onSelect({company_id: e.id })} className="w-full min-h-[44px] text-left px-3 py-2 rounded-lg hover:bg-[var(--sheet-soft)] text-base flex items-center justify-between text-[#1e293b]"><span>{e.name}</span><span className="text-[11px] text-[var(--sheet-accent)]">{row.company_id===e.id ? "✓" : ""}</span></button>))}
-          {filtered.length===0 && <div className="text-xs text-[var(--text-dim)] px-3 py-2">{t("editor.table.noCompanyResults")}</div>}
-        </div>
-        {row.company_id && (
-          <button onClick={()=>onSelect({company_id: "" })} className="w-full min-h-[44px] text-left px-3 py-2 mt-2 rounded-lg hover:bg-[var(--danger)]/10 text-xs text-[var(--text-dim)] hover:text-[var(--danger)] border-t border-[var(--sheet-border)]">{t("editor.table.removeCompany")}</button>
-        )}
-        <button onClick={onClose} className="w-full min-h-[44px] mt-2 rounded-lg bg-[var(--surface-2)] text-[var(--text)] text-sm font-medium">{t("common.close")}</button>
-      </div>
-    </>,
-    document.body
-  )
-  return createPortal(
-    <div ref={ref} role="listbox" aria-label={t("editor.table.searchCompanyAria")} style={{ position: "fixed", top: pos?.top ?? -9999, left: pos?.left ?? 8, width: 280, zIndex: 70, visibility: pos ? "visible" : "hidden" }} className="bg-white border border-[var(--sheet-border)] rounded-xl shadow-[0_12px_32px_rgba(132,24,67,0.15)] p-2">
-      <Input autoFocus aria-label={t("editor.table.searchCompanyAria")} placeholder={t("editor.table.searchCompanyPh")} value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{ if(e.key==="Escape") onClose() }} className="h-11 text-base mb-2 bg-[var(--sheet-soft)] border-[var(--sheet-border)] text-[#1e293b] placeholder:text-[var(--text-dim)]" />
-      <div className="max-h-[180px] overflow-auto space-y-1">
-        {filtered.map((e:any)=>(<button key={e.id} role="option" aria-selected={row.company_id===e.id} onClick={()=>onSelect({company_id: e.id })} className="w-full text-left px-3 py-2 rounded-lg hover:bg-[var(--sheet-soft)] text-sm flex items-center justify-between text-[#1e293b]"><span>{e.name}</span><span className="text-[11px] text-[var(--sheet-accent)]">{row.company_id===e.id ? "✓" : ""}</span></button>))}
-        {filtered.length===0 && <div className="text-xs text-[var(--text-dim)] px-3 py-2">{t("editor.table.noCompanyResults")}</div>}
-      </div>
-      {row.company_id && (
-        <div className="border-t border-[var(--sheet-border)] mt-2 pt-2">
-          <button onClick={()=>onSelect({company_id: "" })} className="w-full text-left px-3 py-2 rounded-lg hover:bg-[var(--danger)]/10 text-xs text-[var(--text-dim)] hover:text-[var(--danger)]">{t("editor.table.removeCompany")}</button>
-        </div>
-      )}
-    </div>,
-    document.body
-  )
-}
-
-function RowMenu({ row, idx, total, onMove, onDelete, onMarkRow }: { row: any; idx: number; total: number; onMove: (dir: -1 | 1) => void; onDelete: () => void; onMarkRow: (mark: boolean) => void }) {
-  const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
-  const [confirming, setConfirming] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  const trigRef = useRef<HTMLButtonElement>(null)
-  const menuPos = useFloatPos(trigRef, open, 190, ref, 320)
-  // Pantalla chica o táctil: el menú flota como bottom-sheet (inmune a
-  // portales mal posicionados tras scroll/zoom en Chromium móvil).
-  const small = typeof window !== "undefined" && (window.matchMedia?.("(hover: none)").matches || window.innerWidth < 1024)
-  useEffect(() => {
-    if (!open) return
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node) && !(trigRef.current && trigRef.current.contains(e.target as Node))) { setOpen(false); setConfirming(false) } }
-    const k = (e: KeyboardEvent) => { if (e.key === "Escape") { setOpen(false); setConfirming(false) } }
-    document.addEventListener("mousedown", h)
-    document.addEventListener("keydown", k)
-    return () => { document.removeEventListener("mousedown", h); document.removeEventListener("keydown", k) }
-  }, [open])
-  return (
-    <div className="absolute bottom-0 right-0">
-      <button
-        ref={trigRef}
-        onClick={() => { setOpen(!open); setConfirming(false) }}
-        title={t("editor.table.rowOptions")}
-        aria-label={t("editor.table.rowOptions")}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className="relative block w-7 h-7 [@media(hover:none)]:w-11 [@media(hover:none)]:h-11 max-lg:w-11 max-lg:h-11 cursor-pointer bg-transparent transition-opacity opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 focus-visible:opacity-100 max-md:opacity-100 [touch-action:manipulation]"
-      ><span aria-hidden className="absolute bottom-[3px] right-[3px] border-b-[10px] border-b-[var(--sheet-accent)] border-l-[10px] border-l-transparent opacity-80 hover:opacity-100 hover:brightness-125 transition" /></button>
-      {open && small && createPortal(
-        <>
-          <div className="fixed inset-0 z-[65] bg-black/60" onClick={() => { setOpen(false); setConfirming(false) }} aria-hidden />
-          <div ref={ref} role="menu" aria-label={t("editor.table.rowOptions")} className="fixed inset-x-0 bottom-0 z-[70] bg-white border-t border-[var(--sheet-border)] rounded-t-2xl shadow-[0_-12px_32px_rgba(132,24,67,0.15)] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-            {!confirming ? (
-              <>
-                <button onClick={() => { onMarkRow(true); setOpen(false) }} className="w-full min-h-[44px] flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-[#1e293b] hover:bg-[var(--sheet-soft)]"><Check size={13}/> {t("editor.table.markRow")}</button>
-                <button onClick={() => { onMarkRow(false); setOpen(false) }} className="w-full min-h-[44px] flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-[#1e293b] hover:bg-[var(--sheet-soft)]"><Minus size={13}/> {t("editor.table.unmarkRow")}</button>
-                <div className="border-t border-[var(--sheet-border)] mt-1 pt-1" />
-                <button onClick={() => { onMove(-1); setOpen(false) }} disabled={idx === 0} className="w-full min-h-[44px] flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-[#1e293b] hover:bg-[var(--sheet-soft)] disabled:opacity-40 disabled:hover:bg-transparent"><ArrowUp size={13}/> {t("editor.table.moveUp")}</button>
-                <button onClick={() => { onMove(1); setOpen(false) }} disabled={idx === total - 1} className="w-full min-h-[44px] flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-[#1e293b] hover:bg-[var(--sheet-soft)] disabled:opacity-40 disabled:hover:bg-transparent"><ArrowDown size={13}/> {t("editor.table.moveDown")}</button>
-                <div className="border-t border-[var(--sheet-border)] mt-1 pt-1">
-                  <button onClick={() => setConfirming(true)} className="w-full min-h-[44px] flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[var(--danger)] hover:bg-[var(--danger)]/10"><Trash2 size={13}/> {t("editor.table.deleteRow")}</button>
-                </div>
-                <button onClick={() => { setOpen(false); setConfirming(false) }} className="w-full min-h-[44px] mt-2 rounded-lg bg-[var(--surface-2)] text-[var(--text)] text-sm font-medium">{t("common.close")}</button>
-              </>
-            ) : (
-              <div className="p-1.5">
-                <div className="text-sm font-medium text-[#1e293b] px-1.5 pb-1">{t("editor.table.deleteTitle", { name: row.name_snapshot || t("editor.table.defaultRowName", { n: idx + 1 }) })}</div>
-                <div className="text-xs text-[var(--text-dim)] px-1.5 pb-2.5">{t("editor.table.deleteDesc")}</div>
-                <div className="flex gap-1.5">
-                  <button onClick={() => setConfirming(false)} className="flex-1 min-h-[44px] rounded-lg border border-[var(--sheet-border)] text-sm text-[#64748b] hover:bg-[var(--sheet-soft)]">{t("editor.table.cancel")}</button>
-                  <button onClick={() => { onDelete(); setOpen(false); setConfirming(false) }} className="flex-1 min-h-[44px] rounded-lg bg-[var(--danger)] hover:brightness-110 text-sm text-[var(--on-accent)] font-medium">{t("editor.table.delete")}</button>
-                </div>
-              </div>
-            )}
-          </div>
-        </>,
-        document.body
-      )}
-      {open && !small && createPortal(
-        <div ref={ref} style={{ position: "fixed", top: menuPos?.top ?? -9999, left: menuPos?.left ?? 8, width: 190, zIndex: 70, visibility: menuPos ? "visible" : "hidden" }} className="bg-white border border-[var(--sheet-border)] rounded-xl shadow-[0_12px_32px_rgba(132,24,67,0.15)] p-1.5 text-left">
-          {!confirming ? (
-            <>
-              <button onClick={() => { onMarkRow(true); setOpen(false) }} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs text-[#1e293b] hover:bg-[var(--sheet-soft)]"><Check size={13}/> {t("editor.table.markRow")}</button>
-              <button onClick={() => { onMarkRow(false); setOpen(false) }} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs text-[#1e293b] hover:bg-[var(--sheet-soft)]"><Minus size={13}/> {t("editor.table.unmarkRow")}</button>
-              <div className="border-t border-[var(--sheet-border)] mt-1 pt-1" />
-              <button onClick={() => { onMove(-1); setOpen(false) }} disabled={idx === 0} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs text-[#1e293b] hover:bg-[var(--sheet-soft)] disabled:opacity-40 disabled:hover:bg-transparent"><ArrowUp size={13}/> {t("editor.table.moveUp")}</button>
-              <button onClick={() => { onMove(1); setOpen(false) }} disabled={idx === total - 1} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs text-[#1e293b] hover:bg-[var(--sheet-soft)] disabled:opacity-40 disabled:hover:bg-transparent"><ArrowDown size={13}/> {t("editor.table.moveDown")}</button>
-              <div className="border-t border-[var(--sheet-border)] mt-1 pt-1">
-                <button onClick={() => setConfirming(true)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-[var(--danger)] hover:bg-[var(--danger)]/10"><Trash2 size={13}/> {t("editor.table.deleteRow")}</button>
-              </div>
-            </>
-          ) : (
-            <div className="p-1.5">
-              <div className="text-xs font-medium text-[#1e293b] px-1.5 pb-1">{t("editor.table.deleteTitle", { name: row.name_snapshot || t("editor.table.defaultRowName", { n: idx + 1 }) })}</div>
-              <div className="text-[11px] text-[var(--text-dim)] px-1.5 pb-2.5">{t("editor.table.deleteDesc")}</div>
-              <div className="flex gap-1.5">
-                <button onClick={() => setConfirming(false)} className="flex-1 h-7 rounded-lg border border-[var(--sheet-border)] text-xs text-[#64748b] hover:bg-[var(--sheet-soft)]">{t("editor.table.cancel")}</button>
-                <button onClick={() => { onDelete(); setOpen(false); setConfirming(false) }} className="flex-1 h-7 rounded-lg bg-[var(--danger)] hover:brightness-110 text-xs text-[var(--on-accent)] font-medium">{t("editor.table.delete")}</button>
-              </div>
-            </div>
-          )}
-        </div>,
-        document.body
-      )}
-    </div>
-  )
-}
-
-// Numeric stepper with theme arrows (no native spinners).
-function NumberStepper({ value, onChange, min, max, ariaLabel, className, dense }: {
-  value: number; onChange: (v: number) => void; min?: number; max?: number;
-  ariaLabel?: string; className?: string; dense?: boolean
-}) {
-  const { t } = useTranslation()
-  const clamp = (v: number) => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, v))
-  const btn = "flex-1 flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--accent)] active:text-[var(--accent)] transition rounded focus-visible:outline-[var(--accent)]"
-  return (
-    <span className={`inline-flex items-stretch rounded-lg border border-[var(--border)] bg-[var(--bg)] overflow-hidden ${className ?? ""}`}>
-      <Input
-        type="number"
-        aria-label={ariaLabel}
-        value={value}
-        min={min}
-        max={max}
-        onChange={e=>onChange(clamp(Number(e.target.value)))}
-        className={`themed-number ${dense ? "h-9" : "h-11"} flex-1 min-w-0 bg-transparent border-0 text-[var(--text)] text-base px-2 focus-visible:ring-0 focus-visible:outline-none`}
-      />
-      <span className="flex flex-col w-6 shrink-0 border-l border-[var(--border)]" role="group" aria-label={ariaLabel}>
-        <button type="button" aria-label={t("common.increase")} onClick={()=>onChange(clamp(value + 1))} className={btn}><ChevronUp size={12}/></button>
-        <button type="button" aria-label={t("common.decrease")} onClick={()=>onChange(clamp(value - 1))} className={`${btn} border-t border-[var(--border)]`}><ChevronDown size={12}/></button>
-      </span>
-    </span>
-  )
-}
-
-function RowTextCell({ row, field, onSave }: { row: any; field: "assignee" | "note"; onSave: (v: string) => void }) {
-  const { t } = useTranslation()
-  const [v, setV] = useState(row?.[field] ?? "")
-  useEffect(()=> setV(row?.[field] ?? ""), [row?.id, row?.[field]])
-  return <input aria-label={t(field === "assignee" ? "editor.table.responsibleAria" : "editor.table.notesAria")} value={v} onChange={e=>setV(e.target.value)} onBlur={()=>{ if(v!== (row?.[field] ?? "")) onSave(v)}} onKeyDown={e=>{ if(e.key==="Enter") (e.target as HTMLInputElement).blur() }} placeholder="—" className="w-full min-w-0 max-w-full min-h-[44px] px-2 py-1 text-base border border-transparent hover:border-[var(--sheet-border)] focus:border-[var(--sheet-accent)] rounded focus:outline-none bg-transparent text-[#1e293b]" />
-}
-
-// Draggable Excel-style handle on the grid lines.
-// axis x = borde derecho (ancho de columna), axis y = borde inferior (alto de row).
-// Reports hover and drag to paint the full-length guide (one same column/row).
-function DragHandle({ axis, title, zoom, startV, min, onV, onReset, onHover, onDrag }: {
-  axis: "x" | "y"; title: string; zoom: number; startV: number; min: number;
-  onV: (v: number) => void; onReset: () => void;
-  onHover?: (active: boolean) => void; onDrag?: (active: boolean) => void
-}) {
-  const st = useRef<{ p: number; v: number; dragging: boolean } | null>(null)
-  const [on, setOn] = useState(false)
-  // Táctil: doble-tap sobre el handle = reset (el dblclick de PC no existe).
-  const lastTap = useRef(0)
-  const end = (notify = true, countTap = false) => {
-    const was = st.current !== null
-    const dragged = st.current?.dragging ?? false
-    st.current = null
-    setOn(false)
-    if (was && !dragged && countTap) {
-      const now = Date.now()
-      if (now - lastTap.current < 300) { lastTap.current = 0; onReset() }
-      else lastTap.current = now
-    } else if (was && dragged && notify) onDrag?.(false)
-  }
-  const pos = axis === "x"
-    ? "top-0 bottom-0 -right-[12px] w-[25px] cursor-col-resize max-lg:-right-[16px] max-lg:w-[33px]"
-    : "left-0 right-0 -bottom-[12px] h-[25px] cursor-row-resize max-lg:-bottom-[16px] max-lg:h-[33px]"
-  const line = axis === "x"
-    ? "absolute inset-y-0 left-1/2 -ml-px w-[2px]"
-    : "absolute inset-x-0 top-1/2 -mt-px h-[2px]"
-  return (
-    <span
-      title={title}
-      role="separator"
-      aria-orientation={axis === "x" ? "vertical" : "horizontal"}
-      aria-valuenow={Math.round(startV)}
-      aria-valuemin={min}
-      aria-label={title}
-      tabIndex={0}
-      onFocus={() => onHover?.(true)}
-      onBlur={() => onHover?.(false)}
-      onKeyDown={(e) => {
-        if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); onV(Math.max(min, startV - 4)) }
-        else if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); onV(startV + 4) }
-        else if (e.key === "Home") { e.preventDefault(); onReset() }
-      }}
-      onMouseEnter={() => onHover?.(true)}
-      onMouseLeave={() => onHover?.(false)}
-      onDoubleClick={(e) => { e.stopPropagation(); onReset() }}
-      onPointerDown={(e) => {
-        // Solo registrar: el preventDefault/captura van al superar el umbral
-        // (ver onPointerMove). Así un tap sobre el handle llega como click.
-        const parent = (e.currentTarget as HTMLElement).parentElement
-        const rect = parent?.getBoundingClientRect()
-        const measured = rect ? (axis === "x" ? rect.width : rect.height) / (zoom || 1) : 0
-        st.current = { p: axis === "x" ? e.clientX : e.clientY, v: measured > 0 ? measured : startV, dragging: false }
-        e.stopPropagation()
-      }}
-      onPointerMove={(e) => {
-        const s = st.current
-        if (!s) return
-        const d = ((axis === "x" ? e.clientX : e.clientY) - s.p) / (zoom || 1)
-        if (!s.dragging) {
-          if (Math.abs(d) < 6) return // umbral táctil: aún puede ser un tap
-          s.dragging = true;
-          (e.target as HTMLElement).setPointerCapture(e.pointerId)
-          setOn(true)
-          onDrag?.(true)
-          e.preventDefault()
-        }
-        onV(Math.max(min, Math.round(s.v + d)))
-      }}
-      onPointerUp={(e) => { end(true, true); try { (e.target as HTMLElement).releasePointerCapture(e.pointerId) } catch { /* noop */ } }}
-      onPointerCancel={() => end()}
-      className={`absolute ${pos} z-10 touch-none group/handle focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] rounded`}
-    >
-      <span className={`${line} ${on ? "bg-[var(--accent)]" : "bg-transparent group-hover/handle:bg-[var(--accent)] [@media(hover:none)]:bg-[var(--accent)]/30"} transition-colors`} />
-    </span>
-  )
-}
+import { Plus, Minus, Users, Calendar, Check, Save, Download, Eye, Undo2, Redo2, Settings2, FileText, Table2, Palette, RectangleVertical, RectangleHorizontal, PanelRightClose, PanelRightOpen, Menu, Pencil, X } from "lucide-react"
+import { CompanyPicker, DragHandle, NumberStepper, PERSON_COLORS, RowMenu, RowTextCell, useFloatPos } from "@/features/editor/components"
+import { editorApi } from "@/features/editor/api"
+import { queryKeys } from "@/shared/queryKeys"
 
 const ZOOM_STEPS = [0.5, 0.6, 0.75, 1, 1.25, 1.5]
 const defaultZoom = () => 1
@@ -319,8 +28,22 @@ export function Editor() {
   const { t } = useTranslation()
   const { id } = useParams()
   const qc = useQueryClient()
-  const settings = useSettingsStore()
-  const header = useEditorHeaderStore()
+  // Selectores finos: evita re-render global cuando cambia un setting/header
+  // que este Editor no usa (antes: suscripcion total al store).
+  const autosave = useSettingsStore(s => s.autosave)
+  const table_header_bg = useSettingsStore(s => s.table_header_bg)
+  const visibleFields = useSettingsStore(s => s.visible_fields)
+  const showSummary = useSettingsStore(s => s.show_summary)
+  const tableDensity = useSettingsStore(s => s.table_density)
+  const primaryColor = useSettingsStore(s => s.primary_color)
+  const setSettings = useSettingsStore(s => s.set)
+  const headerDirty = useEditorHeaderStore(s => s.dirty)
+  const headerRecordId = useEditorHeaderStore(s => s.recordId)
+  const headerTitle = useEditorHeaderStore(s => s.title)
+  const headerRowCount = useEditorHeaderStore(s => s.rowCount)
+  const headerOnSaveTitle = useEditorHeaderStore(s => s.onSaveTitle)
+  const setHeader = useEditorHeaderStore(s => s.set)
+  const setHeaderDirty = useEditorHeaderStore(s => s.setDirty)
   const MONTHS = t("editor.months", { returnObjects: true }) as string[]
   const recordId = id
   const pickBtnRef = useRef<HTMLButtonElement | null>(null)
@@ -330,8 +53,8 @@ export function Editor() {
   const isDraft = !recordId
   // Autosave (device-local setting): when OFF, file edits stay local until Guardar
   const persist = <T,>(fn: () => Promise<T>): Promise<T | null> =>
-    (isDraft || settings.autosave === false) ? Promise.resolve(null) : fn()
-  const localOnly = isDraft || settings.autosave === false
+    (isDraft || autosave === false) ? Promise.resolve(null) : fn()
+  const localOnly = isDraft || autosave === false
   // Last server-confirmed state, for reconciling on Guardar with autosave OFF
   // (effect placed after the queries — see below)
   const savedRef = useRef<HistorySnapshot | null>(null)
@@ -377,10 +100,10 @@ export function Editor() {
   const setMobileOpen = useUiStore((s) => s.setMobileOpen)
   const rightCollapsed = !rightOpen
   const setRightCollapsed = (v: boolean) => setRightOpen(!v)
-  const { data: record, isPending: recPending, isError: recError, refetch: recRefetch } = useQuery({ queryKey: ["record", recordId], enabled: !!recordId, queryFn: async () => (await api.get(`/records/${recordId}`)).data })
-  const { data: rows, isPending: rowsPending, isError: rowsError, refetch: rowsRefetch } = useQuery({ queryKey: ["rows", recordId], enabled: !!recordId, queryFn: async () => (await api.get(`/records/${recordId}/rows`)).data })
-  const { data: cells, isError: cellsError, refetch: cellsRefetch } = useQuery({ queryKey: ["cells", recordId], enabled: !!recordId, queryFn: async () => (await api.get(`/records/${recordId}/cells`)).data })
-  const { data: statsData } = useQuery({ queryKey: ["stats", recordId], enabled: !!recordId, queryFn: async () => (await api.get(`/records/${recordId}/stats`)).data })
+  const { data: record, isPending: recPending, isError: recError, refetch: recRefetch } = useQuery({ queryKey: queryKeys.record(recordId), enabled: !!recordId, queryFn: () => editorApi.getRecord(recordId!) })
+  const { data: rows, isPending: rowsPending, isError: rowsError, refetch: rowsRefetch } = useQuery({ queryKey: queryKeys.rows(recordId), enabled: !!recordId, queryFn: () => editorApi.getRows(recordId!) })
+  const { data: cells, isError: cellsError, refetch: cellsRefetch } = useQuery({ queryKey: queryKeys.cells(recordId), enabled: !!recordId, queryFn: () => editorApi.getCells(recordId!) })
+  const { data: statsData } = useQuery({ queryKey: queryKeys.stats(recordId), enabled: !!recordId, queryFn: () => editorApi.getStats(recordId!) })
   // Draft: compute progress locally so the summary block works before Guardar
   const stats = isDraft
     ? (() => {
@@ -390,15 +113,15 @@ export function Editor() {
         return total ? { total, reviewed, pending: total - reviewed, progress: Math.round((reviewed / total) * 100) } : null
       })()
     : statsData
-  const { data: companies, isError: companiesError, refetch: companiesRefetch } = useQuery({ queryKey: ["companies"], queryFn: async () => (await api.get("/companies")).data })
-  const { data: design } = useQuery({ queryKey: ["design", recordId], enabled: !!recordId, queryFn: async () => (await api.get(`/records/${recordId}/layout`)).data })
+  const { data: companies, isError: companiesError, refetch: companiesRefetch } = useQuery({ queryKey: queryKeys.companies, queryFn: editorApi.getCompanies })
+  const { data: design } = useQuery({ queryKey: queryKeys.design(recordId), enabled: !!recordId, queryFn: () => editorApi.getDesign(recordId!) })
   useEffect(() => {
     if (!isDraft && record && rows && cells && !savedRef.current) {
       savedRef.current = {
         label: "saved",
-        rows: qc.getQueryData(["rows", recordId]),
-        cells: qc.getQueryData(["cells", recordId]),
-        record: qc.getQueryData(["record", recordId]),
+        rows: qc.getQueryData(queryKeys.rows(recordId)),
+        cells: qc.getQueryData(queryKeys.cells(recordId)),
+        record: qc.getQueryData(queryKeys.record(recordId)),
       }
     }
   }, [isDraft, record, rows, cells])
@@ -413,17 +136,17 @@ export function Editor() {
     clearTimeout(designTimers.current[section])
     designTimers.current[section] = setTimeout(async () => {
       try {
-        const cur = ((qc.getQueryData(["design", recordId]) as any[]) ?? []).find((d: any) => d.section === section)
-        await api.put(`/records/${recordId}/layout`, { section, payload: cur?.payload ?? {} })
+        const cur = ((qc.getQueryData(queryKeys.design(recordId)) as any[]) ?? []).find((d: any) => d.section === section)
+        await editorApi.putLayout(recordId!, section, cur?.payload ?? {})
       } catch { /* best-effort: stays cached and retries on the next change */ }
     }, 500)
   }
   const patchDesign = (section: "sheet" | "table", fn: (p: any) => any) => {
-    const cur = ((qc.getQueryData(["design", recordId]) as any[]) ?? []).slice()
+    const cur = ((qc.getQueryData(queryKeys.design(recordId)) as any[]) ?? []).slice()
     const i = cur.findIndex((d: any) => d.section === section)
     if (i >= 0) cur[i] = { ...cur[i], payload: fn(cur[i].payload ?? {}) }
     else cur.push({ section, payload: fn({}), updated_at: new Date().toISOString() })
-    qc.setQueryData(["design", recordId], cur)
+    qc.setQueryData(queryKeys.design(recordId), cur)
     schedulePutDesign(section)
   }
   const changeOrientation = (o: "vertical" | "horizontal") => {
@@ -524,24 +247,24 @@ export function Editor() {
   useEffect(() => {
     if (!isDraft) return
     const y = currentYear()
-    if (!qc.getQueryData(["record", recordId])) {
-      qc.setQueryData(["record", recordId], { id: "draft", title: "", review_type: "", period_start: y, period_end: y, staff_count: 2, staff_names: [] })
+    if (!qc.getQueryData(queryKeys.record(recordId))) {
+      qc.setQueryData(queryKeys.record(recordId), { id: "draft", title: "", review_type: "", period_start: y, period_end: y, staff_count: 2, staff_names: [] })
     }
-    if (!qc.getQueryData(["rows", recordId])) {
-      qc.setQueryData(["rows", recordId], Array.from({ length: 5 }, (_, i) => ({
+    if (!qc.getQueryData(queryKeys.rows(recordId))) {
+      qc.setQueryData(queryKeys.rows(recordId), Array.from({ length: 5 }, (_, i) => ({
         id: `dr-seed-${i}`, record_id: "draft", company_id: null, name_snapshot: "", position: i, assignee: "", note: "",
       })))
     }
-    if (!qc.getQueryData(["cells", recordId])) qc.setQueryData(["cells", recordId], [])
-    if (!qc.getQueryData(["design", recordId])) qc.setQueryData(["design", recordId], [])
+    if (!qc.getQueryData(queryKeys.cells(recordId))) qc.setQueryData(queryKeys.cells(recordId), [])
+    if (!qc.getQueryData(queryKeys.design(recordId))) qc.setQueryData(queryKeys.design(recordId), [])
     const h = useEditorHeaderStore.getState()
-    if (!h.recordId) header.set({ recordId: "draft", title: "", rowCount: 5 } as any)
+    if (!h.recordId) setHeader({ recordId: "draft", title: "", rowCount: 5 } as any)
   }, [isDraft])
   // Local-only mode (draft, or file with autosave OFF): materialize a cell object
   // for every row x year x month so the whole sheet works exactly like a saved file
   useEffect(() => {
-    if ((!isDraft && settings.autosave !== false) || !record || !rows) return
-    const have = new Set(((qc.getQueryData(["cells", recordId]) as any[]) ?? []).map((c: any) => `${c.row_id}-${c.year}-${c.month}`))
+    if ((!isDraft && autosave !== false) || !record || !rows) return
+    const have = new Set(((qc.getQueryData(queryKeys.cells(recordId)) as any[]) ?? []).map((c: any) => `${c.row_id}-${c.year}-${c.month}`))
     const add: any[] = []
     for (const r of (rows as any[])) {
       for (let y = record.period_start; y <= record.period_end; y++) {
@@ -552,8 +275,8 @@ export function Editor() {
         }
       }
     }
-    if (add.length) qc.setQueryData(["cells", recordId], (old: any) => [...(old ?? []), ...add])
-  }, [isDraft, settings.autosave, record, rows])
+    if (add.length) qc.setQueryData(queryKeys.cells(recordId), (old: any) => [...(old ?? []), ...add])
+  }, [isDraft, autosave, record, rows])
   // Draft: warn before losing unsaved work on reload/close
   useEffect(() => {
     if (!isDraft) return
@@ -568,8 +291,8 @@ export function Editor() {
   useEffect(() => {
     if (!isDraft) return
     return () => {
-      for (const k of ["record", "rows", "cells", "design"] as const) {
-        qc.removeQueries({ queryKey: [k, undefined] })
+      for (const key of [queryKeys.record(undefined), queryKeys.rows(undefined), queryKeys.cells(undefined), queryKeys.design(undefined)] as const) {
+        qc.removeQueries({ queryKey: key })
       }
       useEditorHeaderStore.getState().set({ recordId: null, title: "", rowCount: 0, dirty: false } as any)
     }
@@ -578,21 +301,21 @@ export function Editor() {
   // Riley: refresh mid-flow no pierde `dirty`
   useEffect(() => {
     if (!recordId) return
-    try { if (localStorage.getItem(`patty-dirty-${recordId}`) === "1") header.setDirty(true) } catch { /* noop */ }
+    try { if (localStorage.getItem(`patty-dirty-${recordId}`) === "1") setHeaderDirty(true) } catch { /* noop */ }
   }, [recordId])
   useEffect(() => {
     if (!recordId) return
     try {
-      if (header.dirty) localStorage.setItem(`patty-dirty-${recordId}`, "1")
+      if (headerDirty) localStorage.setItem(`patty-dirty-${recordId}`, "1")
       else localStorage.removeItem(`patty-dirty-${recordId}`)
     } catch { /* noop */ }
-  }, [header.dirty, recordId])
+  }, [headerDirty, recordId])
 
   const snapshotCurrent = (label: string): HistorySnapshot => ({
     label,
-    rows: qc.getQueryData(["rows", recordId]),
-    cells: qc.getQueryData(["cells", recordId]),
-    record: qc.getQueryData(["record", recordId]),
+    rows: qc.getQueryData(queryKeys.rows(recordId)),
+    cells: qc.getQueryData(queryKeys.cells(recordId)),
+    record: qc.getQueryData(queryKeys.record(recordId)),
   })
   const lastPush = useRef<{ label: string; at: number } | null>(null)
   const pushHistory = (label: string) => {
@@ -611,9 +334,9 @@ export function Editor() {
     st.push(s)
   }
   const applySnapshot = (s: HistorySnapshot) => {
-    if (s.rows !== undefined) qc.setQueryData(["rows", recordId], s.rows)
-    if (s.cells !== undefined) qc.setQueryData(["cells", recordId], s.cells)
-    if (s.record !== undefined) qc.setQueryData(["record", recordId], s.record)
+    if (s.rows !== undefined) qc.setQueryData(queryKeys.rows(recordId), s.rows)
+    if (s.cells !== undefined) qc.setQueryData(queryKeys.cells(recordId), s.cells)
+    if (s.record !== undefined) qc.setQueryData(queryKeys.record(recordId), s.record)
   }
   // Brings the server to the `target` state, using `source` (previous local state) for a minimal diff.
   const syncSnapshotToServer = async (target: HistorySnapshot, source: HistorySnapshot, force = false) => {
@@ -634,7 +357,7 @@ export function Editor() {
         patch.staff_names = sanitizeStaffNames(ta.staff_names)
       }
       if (Object.keys(patch).length) {
-        try { await api.put(`/records/${recordId}`, patch) } catch { /* best-effort */ }
+        try { await editorApi.patchRecord(recordId!, patch) } catch { /* best-effort */ }
       }
     } else if (ta && !sa) {
       const patch: any = {}
@@ -643,7 +366,7 @@ export function Editor() {
       }
       if (ta.staff_names !== undefined) patch.staff_names = sanitizeStaffNames(ta.staff_names)
       if (Object.keys(patch).length) {
-        try { await api.put(`/records/${recordId}`, patch) } catch { /* best-effort */ }
+        try { await editorApi.patchRecord(recordId!, patch) } catch { /* best-effort */ }
       }
     }
     // Filas eliminadas en target (sobran en servidor) -> DELETE
@@ -652,7 +375,7 @@ export function Editor() {
     const recreatedOldIds = new Set<string>()
     for (const f of sFilas) {
       if (!tIds.has(f.id)) {
-        try { await api.delete(`/records/${recordId}/rows/${f.id}`) } catch { /* best-effort */ }
+        try { await editorApi.deleteRow(recordId!, f.id) } catch { /* best-effort */ }
       }
     }
     // Rows missing on the server (were deleted) -> recreate
@@ -661,19 +384,19 @@ export function Editor() {
         recreatedOldIds.add(f.id)
         try {
           const payload: any = f.company_id ? {company_id: f.company_id } : {name: f.name_snapshot || t("editor.table.defaultRowName", { n: "" }).trim() || (i18n.language === "en" ? "Row" : "Fila") }
-          const created = (await api.post(`/records/${recordId}/rows`, payload)).data
+          const created = await editorApi.addRow(recordId!, payload)
           const patch: any = {}
           if (f.assignee) patch.assignee = f.assignee
           if (f.note) patch.note = f.note
-          if (Object.keys(patch).length) await api.put(`/records/${recordId}/rows/${created.id}`, patch)
+          if (Object.keys(patch).length) await editorApi.updateRow(recordId!, created.id, patch)
           // Restaurar checks de esa row (los recreados nacen sin revisar)
           const want = tCeldas.filter((c: any) => c.row_id === f.id && c.reviewed)
           if (want.length) {
-            const fresh = (await api.get(`/records/${recordId}/cells`)).data as any[]
+            const fresh = (await editorApi.getCells(recordId!)) as any[]
             const byKey = new Map(fresh.filter((c: any) => c.row_id === created.id).map((c: any) => [`${c.year}-${c.month}`, c]))
             await Promise.all(want.map((w: any) => {
               const hit = byKey.get(`${w.year}-${w.month}`)
-              return hit ? api.put(`/records/cells/${hit.id}`, {reviewed: true, color: w.color ?? "" }).catch(() => null) : null
+              return hit ? editorApi.setCell(hit.id, {reviewed: true, color: w.color ?? "" }).catch(() => null) : null
             }))
           }
         } catch { /* best-effort */ }
@@ -689,7 +412,7 @@ export function Editor() {
       if ((f.assignee ?? "") !== (s.assignee ?? "")) patch.assignee = f.assignee ?? ""
       if ((f.note ?? "") !== (s.note ?? "")) patch.note = f.note ?? ""
       if (Object.keys(patch).length) {
-        try { await api.put(`/records/${recordId}/rows/${f.id}`, patch) } catch { /* best-effort */ }
+        try { await editorApi.updateRow(recordId!, f.id, patch) } catch { /* best-effort */ }
       }
       return null
     }))
@@ -697,7 +420,7 @@ export function Editor() {
     const tOrder = tFilas.slice().sort((a: any, b: any) => a.position - b.position).map((f: any) => f.id).join(",")
     const sOrder = sFilas.slice().sort((a: any, b: any) => a.position - b.position).map((f: any) => f.id).join(",")
     if (tOrder && tOrder !== sOrder) {
-      try { await api.post(`/records/${recordId}/rows/reorder`, {ids: tFilas.slice().sort((a: any, b: any) => a.position - b.position).map((f: any) => f.id) }) } catch { /* best-effort */ }
+      try { await editorApi.reorderRows(recordId!, tFilas.slice().sort((a: any, b: any) => a.position - b.position).map((f: any) => f.id)) } catch { /* best-effort */ }
     }
     // Common cells (same id) with different reviewed flag or color -> PUT
     const sById = new Map(sCeldas.map((c: any) => [c.id, c]))
@@ -708,7 +431,7 @@ export function Editor() {
     })
     if (changed.length) {
       await Promise.all(changed.map((c: any) =>
-        api.put(`/records/cells/${c.id}`, {reviewed: !!c.reviewed, color: c.color ?? "" }).catch(() => null)
+        editorApi.setCell(c.id, {reviewed: !!c.reviewed, color: c.color ?? "" }).catch(() => null)
       ))
     }
   }
@@ -718,12 +441,12 @@ export function Editor() {
     const prev = st.popUndo(current)
     if (!prev) return
     applySnapshot(prev)
-    header.setDirty(true)
+    setHeaderDirty(true)
     try { await syncSnapshotToServer(prev, current) } finally {
-      qc.invalidateQueries({ queryKey: ["rows", recordId] })
-      qc.invalidateQueries({ queryKey: ["cells", recordId] })
-      qc.invalidateQueries({ queryKey: ["record", recordId] })
-      qc.invalidateQueries({ queryKey: ["stats", recordId] })
+      qc.invalidateQueries({ queryKey: queryKeys.rows(recordId) })
+      qc.invalidateQueries({ queryKey: queryKeys.cells(recordId) })
+      qc.invalidateQueries({ queryKey: queryKeys.record(recordId) })
+      qc.invalidateQueries({ queryKey: queryKeys.stats(recordId) })
     }
   }
   const doRedo = async () => {
@@ -732,12 +455,12 @@ export function Editor() {
     const next = st.popRedo(current)
     if (!next) return
     applySnapshot(next)
-    header.setDirty(true)
+    setHeaderDirty(true)
     try { await syncSnapshotToServer(next, current) } finally {
-      qc.invalidateQueries({ queryKey: ["rows", recordId] })
-      qc.invalidateQueries({ queryKey: ["cells", recordId] })
-      qc.invalidateQueries({ queryKey: ["record", recordId] })
-      qc.invalidateQueries({ queryKey: ["stats", recordId] })
+      qc.invalidateQueries({ queryKey: queryKeys.rows(recordId) })
+      qc.invalidateQueries({ queryKey: queryKeys.cells(recordId) })
+      qc.invalidateQueries({ queryKey: queryKeys.record(recordId) })
+      qc.invalidateQueries({ queryKey: queryKeys.stats(recordId) })
     }
   }
   useEffect(() => {
@@ -778,10 +501,10 @@ export function Editor() {
     mutationFn: async (c: any) => {
       const myColor = PERSON_COLORS[activePerson] ?? ""
       return persist(async () => {
-        if (!c.reviewed) return (await api.put(`/records/cells/${c.id}`, {reviewed: true, color: myColor })).data
+        if (!c.reviewed) return await editorApi.setCell(c.id, {reviewed: true, color: myColor })
         const owner = PERSON_COLORS.indexOf(c.color ?? "")
-        if (owner !== activePerson) return (await api.put(`/records/cells/${c.id}`, {reviewed: true, color: myColor })).data
-        return (await api.put(`/records/cells/${c.id}`, {reviewed: false, color: "" })).data
+        if (owner !== activePerson) return await editorApi.setCell(c.id, {reviewed: true, color: myColor })
+        return await editorApi.setCell(c.id, {reviewed: false, color: "" })
       })
     },
     onMutate: async (c: any) => {
@@ -790,43 +513,43 @@ export function Editor() {
       const action = !c?.reviewed ? "mark" : (owner !== activePerson ? "recolor" : "unmark")
       const color = action === "unmark" ? "" : myColor
       pushHistory(action === "mark" ? t("editor.history.markAs", { who: personName(staffNames, activePerson) }) : action === "recolor" ? t("editor.history.recolor", { from: personName(staffNames, owner), to: personName(staffNames, activePerson) }) : t("editor.history.unmark"))
-      header.setDirty(true)
-      await qc.cancelQueries({ queryKey: ["cells", recordId] })
-      const prev = qc.getQueryData(["cells", recordId])
-      qc.setQueryData(["cells", recordId], (old: any) => (old ?? []).map((x: any) => x.id === c.id ? { ...x, reviewed: action !== "unmark", color } : x))
+      setHeaderDirty(true)
+      await qc.cancelQueries({ queryKey: queryKeys.cells(recordId) })
+      const prev = qc.getQueryData(queryKeys.cells(recordId))
+      qc.setQueryData(queryKeys.cells(recordId), (old: any) => (old ?? []).map((x: any) => x.id === c.id ? { ...x, reviewed: action !== "unmark", color } : x))
       return { prev }
     },
-    onError: (e, _c, ctx: any) => { if (ctx?.prev) qc.setQueryData(["cells", recordId], ctx.prev); mutErr(e) },
-    onSettled: () => { qc.invalidateQueries({ queryKey: ["cells", recordId] }); qc.invalidateQueries({ queryKey: ["stats", recordId] }) },
+    onError: (e, _c, ctx: any) => { if (ctx?.prev) qc.setQueryData(queryKeys.cells(recordId), ctx.prev); mutErr(e) },
+    onSettled: () => { qc.invalidateQueries({ queryKey: queryKeys.cells(recordId) }); qc.invalidateQueries({ queryKey: queryKeys.stats(recordId) }) },
   })
   // Recolor the selected cell from the panel (stamps when empty, never unstamps)
   const recolor = useMutation({
-    mutationFn: async ({ cellId, color }: { cellId: string; color: string }) => persist(() => api.put(`/records/cells/${cellId}`, {reviewed: true, color }).then(r => r.data)),
+    mutationFn: async ({ cellId, color }: { cellId: string; color: string }) => persist(() => editorApi.setCell(cellId, {reviewed: true, color })),
     onMutate: async (v: { cellId: string; color: string }) => {
-      await qc.cancelQueries({ queryKey: ["cells", recordId] })
-      const prev = qc.getQueryData(["cells", recordId])
+      await qc.cancelQueries({ queryKey: queryKeys.cells(recordId) })
+      const prev = qc.getQueryData(queryKeys.cells(recordId))
       const cur = ((prev as any[]) ?? []).find((x: any) => x.id === v.cellId)
       const from = PERSON_COLORS.indexOf(cur?.color ?? "")
       const to = PERSON_COLORS.indexOf(v.color)
       pushHistory(cur?.reviewed ? t("editor.history.recolor", { from: from >= 0 ? personName(staffNames, from) : "", to: personName(staffNames, to) }) : t("editor.history.markAs", { who: personName(staffNames, to) }))
-      header.setDirty(true)
-      qc.setQueryData(["cells", recordId], (old: any) => (old ?? []).map((x: any) => x.id === v.cellId ? { ...x, reviewed: true, color: v.color } : x))
+      setHeaderDirty(true)
+      qc.setQueryData(queryKeys.cells(recordId), (old: any) => (old ?? []).map((x: any) => x.id === v.cellId ? { ...x, reviewed: true, color: v.color } : x))
       return { prev }
     },
-    onError: (e, _v, ctx: any) => { if (ctx?.prev) qc.setQueryData(["cells", recordId], ctx.prev); mutErr(e) },
-    onSettled: () => { qc.invalidateQueries({ queryKey: ["cells", recordId] }); qc.invalidateQueries({ queryKey: ["stats", recordId] }) },
+    onError: (e, _v, ctx: any) => { if (ctx?.prev) qc.setQueryData(queryKeys.cells(recordId), ctx.prev); mutErr(e) },
+    onSettled: () => { qc.invalidateQueries({ queryKey: queryKeys.cells(recordId) }); qc.invalidateQueries({ queryKey: queryKeys.stats(recordId) }) },
   })
   // Draft: apply row/record operations to local cache (mirrors server semantics)
   const companyNameOf = (companyId?: string) =>
     ((companies as any[]) ?? []).find((e: any) => e.id === companyId)?.name ?? ""
   const draftApplyRow = (p: any) => {
-    const rowsNow = ((qc.getQueryData(["rows", recordId]) as any[]) ?? []).slice()
+    const rowsNow = ((qc.getQueryData(queryKeys.rows(recordId)) as any[]) ?? []).slice()
     const name = p.company_id ? companyNameOf(p.company_id) : (p.name ?? "").trim()
     const row = { id: `dr-${Date.now().toString(36)}-${rowsNow.length}`, record_id: "draft", company_id: p.company_id ?? null, name_snapshot: name, position: rowsNow.length, assignee: "", note: "" }
-    qc.setQueryData(["rows", recordId], [...rowsNow, row])
+    qc.setQueryData(queryKeys.rows(recordId), [...rowsNow, row])
   }
   const draftApplyRowPatch = (rowId: string, patch: any) => {
-    qc.setQueryData(["rows", recordId], (old: any) => (old ?? []).map((f: any) => {
+    qc.setQueryData(queryKeys.rows(recordId), (old: any) => (old ?? []).map((f: any) => {
       if (f.id !== rowId) return f
       const next = { ...f }
       if (patch.company_id !== undefined) {
@@ -840,19 +563,19 @@ export function Editor() {
     }))
   }
   const draftDeleteRow = (rowId: string) => {
-    qc.setQueryData(["rows", recordId], (old: any) => (old ?? []).filter((f: any) => f.id !== rowId))
-    qc.setQueryData(["cells", recordId], (old: any) => (old ?? []).filter((c: any) => c.row_id !== rowId))
+    qc.setQueryData(queryKeys.rows(recordId), (old: any) => (old ?? []).filter((f: any) => f.id !== rowId))
+    qc.setQueryData(queryKeys.cells(recordId), (old: any) => (old ?? []).filter((c: any) => c.row_id !== rowId))
   }
   const draftApplyRecord = (patch: any) => {
-    qc.setQueryData(["record", recordId], (old: any) => ({ ...old, ...patch }))
+    qc.setQueryData(queryKeys.record(recordId), (old: any) => ({ ...old, ...patch }))
   }
-  const addRow = useMutation({ mutationFn: async (p:any) => persist(() => api.post(`/records/${recordId}/rows`, p).then(r => r.data)), onMutate: (p: any) => { pushHistory(t("editor.history.addRow")); header.setDirty(true); if (isDraft) draftApplyRow(p) }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["rows", recordId] }); qc.invalidateQueries({ queryKey: ["cells", recordId] }) }, onError: mutErr })
-  const updateRow = useMutation({ mutationFn: async ({ rowId, patch }: { rowId: string; patch: any }) => persist(() => api.put(`/records/${recordId}/rows/${rowId}`, patch).then(r => r.data)), onMutate: (v: any) => { pushHistory(v?.patch?.company_id !== undefined ? t("editor.history.changeCompany") : t("editor.history.editRow")); header.setDirty(true); if (isDraft) draftApplyRowPatch(v.rowId, v.patch) }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["rows", recordId] }); qc.invalidateQueries({ queryKey: ["cells", recordId] }) }, onError: mutErr })
-  const deleteRow = useMutation({ mutationFn: async (rowId: string) => persist(() => api.delete(`/records/${recordId}/rows/${rowId}`)), onMutate: (rowId: string) => { pushHistory(t("editor.history.deleteRow")); header.setDirty(true); if (isDraft) draftDeleteRow(rowId) }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["rows", recordId] }); qc.invalidateQueries({ queryKey: ["design", recordId] }) }, onError: mutErr })
-  const applyScale = useMutation({ mutationFn: async () => persist(() => api.put(`/records/${recordId}`, {period_start: Number(scaleStart), period_end: Number(scaleEnd) }).then(r => r.data)), onMutate: () => { pushHistory(t("editor.history.changeScale")); header.setDirty(true); if (isDraft) draftApplyRecord({ period_start: Number(scaleStart), period_end: Number(scaleEnd) }) }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["record", recordId] }); qc.invalidateQueries({ queryKey: ["rows", recordId] }); qc.invalidateQueries({ queryKey: ["cells", recordId] }); qc.invalidateQueries({ queryKey: ["stats", recordId] }) }, onError: mutErr })
-  const updateStaff = useMutation({ mutationFn: async ({n, names}:{n:number;names?:string[]}) => persist(() => api.put(`/records/${recordId}`, {staff_count: n, ...(names ? {staff_names: names} : {}) }).then(r => r.data)), onMutate: ({n})=>{ pushHistory(t("editor.history.changeStaff")); header.setDirty(true); if (isDraft) draftApplyRecord({ staff_count: n }) }, onSuccess: (_d, {n}) => { qc.invalidateQueries({queryKey:["record",recordId]}); if (personIdx >= n) { choosePerson(Math.max(0, n - 1)); push({ kind: "info", title: t("editor.panel.staffShrunk", { who: personName(staffNames, Math.max(0, n - 1)) }) }) } }, onError: mutErr })
-  const updateNames = useMutation({ mutationFn: async (names:string[]) => { const clean = sanitizeStaffNames(names); if (isDraft) { draftApplyRecord({ staff_names: clean }); return clean } return persist(() => api.put(`/records/${recordId}`, {staff_names: clean}).then(r => r.data)) }, onMutate: ()=>{ pushHistory(t("editor.history.changeNames")); header.setDirty(true) }, onSuccess: () => { qc.invalidateQueries({queryKey:["record",recordId]}) }, onError: mutErr })
-  const saveType = (v:string) => { const txt = v.trim(); if (txt !== (record?.review_type ?? "")) { pushHistory(t("editor.history.changeType")); header.setDirty(true); if (isDraft) draftApplyRecord({ review_type: txt }); else persist(() => api.put(`/records/${recordId}`,{review_type:txt}).then(()=>qc.invalidateQueries({queryKey:["record",recordId]}))) } }
+  const addRow = useMutation({ mutationFn: async (p:any) => persist(() => editorApi.addRow(recordId!, p)), onMutate: (p: any) => { pushHistory(t("editor.history.addRow")); setHeaderDirty(true); if (isDraft) draftApplyRow(p) }, onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.rows(recordId) }); qc.invalidateQueries({ queryKey: queryKeys.cells(recordId) }) }, onError: mutErr })
+  const updateRow = useMutation({ mutationFn: async ({ rowId, patch }: { rowId: string; patch: any }) => persist(() => editorApi.updateRow(recordId!, rowId, patch)), onMutate: (v: any) => { pushHistory(v?.patch?.company_id !== undefined ? t("editor.history.changeCompany") : t("editor.history.editRow")); setHeaderDirty(true); if (isDraft) draftApplyRowPatch(v.rowId, v.patch) }, onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.rows(recordId) }); qc.invalidateQueries({ queryKey: queryKeys.cells(recordId) }) }, onError: mutErr })
+  const deleteRow = useMutation({ mutationFn: async (rowId: string) => persist(() => editorApi.deleteRow(recordId!, rowId)), onMutate: (rowId: string) => { pushHistory(t("editor.history.deleteRow")); setHeaderDirty(true); if (isDraft) draftDeleteRow(rowId) }, onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.rows(recordId) }); qc.invalidateQueries({ queryKey: queryKeys.design(recordId) }) }, onError: mutErr })
+  const applyScale = useMutation({ mutationFn: async () => persist(() => editorApi.patchRecord(recordId!, {period_start: Number(scaleStart), period_end: Number(scaleEnd) })), onMutate: () => { pushHistory(t("editor.history.changeScale")); setHeaderDirty(true); if (isDraft) draftApplyRecord({ period_start: Number(scaleStart), period_end: Number(scaleEnd) }) }, onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.record(recordId) }); qc.invalidateQueries({ queryKey: queryKeys.rows(recordId) }); qc.invalidateQueries({ queryKey: queryKeys.cells(recordId) }); qc.invalidateQueries({ queryKey: queryKeys.stats(recordId) }) }, onError: mutErr })
+  const updateStaff = useMutation({ mutationFn: async ({n, names}:{n:number;names?:string[]}) => persist(() => editorApi.patchRecord(recordId!, {staff_count: n, ...(names ? {staff_names: names} : {}) })), onMutate: ({n})=>{ pushHistory(t("editor.history.changeStaff")); setHeaderDirty(true); if (isDraft) draftApplyRecord({ staff_count: n }) }, onSuccess: (_d, {n}) => { qc.invalidateQueries({queryKey: queryKeys.record(recordId)}); if (personIdx >= n) { choosePerson(Math.max(0, n - 1)); push({ kind: "info", title: t("editor.panel.staffShrunk", { who: personName(staffNames, Math.max(0, n - 1)) }) }) } }, onError: mutErr })
+  const updateNames = useMutation({ mutationFn: async (names:string[]) => { const clean = sanitizeStaffNames(names); if (isDraft) { draftApplyRecord({ staff_names: clean }); return clean } return persist(() => editorApi.patchRecord(recordId!, {staff_names: clean})) }, onMutate: ()=>{ pushHistory(t("editor.history.changeNames")); setHeaderDirty(true) }, onSuccess: () => { qc.invalidateQueries({queryKey: queryKeys.record(recordId)}) }, onError: mutErr })
+  const saveType = (v:string) => { const txt = v.trim(); if (txt !== (record?.review_type ?? "")) { pushHistory(t("editor.history.changeType")); setHeaderDirty(true); if (isDraft) draftApplyRecord({ review_type: txt }); else persist(() => editorApi.patchRecord(recordId!,{review_type:txt}).then(()=>qc.invalidateQueries({queryKey: queryKeys.record(recordId)}))) } }
   const isMutating = useIsMutating()
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle")
   const [validAlert, setValidAlert] = useState<any[] | null>(null)
@@ -895,41 +618,41 @@ export function Editor() {
   const persistDraft = async (): Promise<{ id: string; title: string } | null> => {
     const title = ((record as any)?.title ?? "").trim()
     if (!title) { push({ kind: "error", title: t("editor.draft.titleRequired") }); return null }
-    const draftCells = ((qc.getQueryData(["cells", recordId]) as any[]) ?? [])
+    const draftCells = ((qc.getQueryData(queryKeys.cells(recordId)) as any[]) ?? [])
     const savable = orderedRows.filter((f: any) => !isPristineRow(f, draftCells))
     const miss = findRowsMissingCompany(orderedRows, { skip: (f: any) => isPristineRow(f, draftCells) })
     if (miss.length) { setValidAlert(miss); return null }
     setSaveState("saving")
     try {
-      const rec = (await api.post("/records", {
+      const rec = await editorApi.createRecord({
         title,
         review_type: (record as any)?.review_type ?? "",
         period_start: (record as any)?.period_start ?? currentYear(),
         period_end: (record as any)?.period_end ?? currentYear(),
         staff_count: (record as any)?.staff_count ?? 2,
         staff_names: sanitizeStaffNames((record as any)?.staff_names),
-      })).data
+      })
       const idMap = new Map<string, string>()
       for (const f of savable) {
         const payload: any = f.company_id ? { company_id: f.company_id } : { name: f.name_snapshot }
-        const created = (await api.post(`/records/${rec.id}/rows`, payload)).data
+        const created = await editorApi.addRow(rec.id, payload)
         idMap.set(f.id, created.id)
         const patch: any = {}
         if (f.assignee) patch.assignee = f.assignee
         if (f.note) patch.note = f.note
-        if (Object.keys(patch).length) await api.put(`/records/${rec.id}/rows/${created.id}`, patch)
+        if (Object.keys(patch).length) await editorApi.updateRow(rec.id, created.id, patch)
       }
       // The backend seeds 5 empty rows on record creation: drop the pristine ones
       // so the file keeps exactly the rows the user saved (created rows all
       // carry a company, enforced above, so only backend defaults match).
-      const created = (await api.get(`/records/${rec.id}/rows`)).data as any[]
+      const created = (await editorApi.getRows(rec.id)) as any[]
       await Promise.all(created.filter((r: any) =>
         !r.company_id && !(r.name_snapshot ?? "").trim() && !(r.assignee ?? "").trim() && !(r.note ?? "").trim()
-      ).map((r: any) => api.delete(`/records/${rec.id}/rows/${r.id}`).catch(() => null)))
-      const fresh = (await api.get(`/records/${rec.id}/cells`)).data as any[]
+      ).map((r: any) => editorApi.deleteRow(rec.id, r.id).catch(() => null)))
+      const fresh = (await editorApi.getCells(rec.id)) as any[]
       const freshByKey = new Map(fresh.map((c: any) => [`${c.row_id}-${c.year}-${c.month}`, c]))
       const groups = new Map<string, { reviewed: boolean; color: string; keys: string[] }>()
-      for (const c of ((qc.getQueryData(["cells", recordId]) as any[]) ?? [])) {
+      for (const c of ((qc.getQueryData(queryKeys.cells(recordId)) as any[]) ?? [])) {
         if (!c.reviewed && !c.color) continue
         const newRowId = idMap.get(c.row_id)
         if (!newRowId) continue
@@ -939,16 +662,16 @@ export function Editor() {
       }
       for (const g of groups.values()) {
         const ids = g.keys.map(k => freshByKey.get(k)?.id).filter(Boolean)
-        if (ids.length) await api.post(`/records/${rec.id}/cells/bulk`, { ids, reviewed: g.reviewed, color: g.color })
+        if (ids.length) await editorApi.bulkCells(rec.id, { ids, reviewed: g.reviewed, color: g.color })
       }
       for (const sec of ["sheet", "table"] as const) {
-        const entry = ((qc.getQueryData(["design", recordId]) as any[]) ?? []).find((d: any) => d.section === sec)
+        const entry = ((qc.getQueryData(queryKeys.design(recordId)) as any[]) ?? []).find((d: any) => d.section === sec)
         if (entry && Object.keys(entry.payload ?? {}).length) {
-          await api.put(`/records/${rec.id}/layout`, { section: sec, payload: entry.payload })
+          await editorApi.putLayout(rec.id, sec, entry.payload)
         }
       }
       try { localStorage.removeItem(`patty-dirty-undefined`) } catch { /* noop */ }
-      qc.invalidateQueries({ queryKey: ["records"] })
+      qc.invalidateQueries({ queryKey: queryKeys.records })
       return { id: rec.id, title }
     } catch (e) {
       setSaveState("idle")
@@ -969,8 +692,8 @@ export function Editor() {
   }
   const downloadSaved = async (id: string, title: string, fmt: "pdf" | "excel") => {
     try {
-      const res = await api.get(`/records/${id}/export?format=${fmt}&lang=${i18n.language}`, { responseType: "blob" })
-      downloadBlob(res.data, exportFilename(title, fmt === "pdf" ? "pdf" : "xlsx"))
+      const blob = await editorApi.exportBlob(id, fmt, i18n.language)
+      downloadBlob(blob, exportFilename(title, fmt === "pdf" ? "pdf" : "xlsx"))
       push({ kind: "success", title: t("common.exportOk") })
     } catch {
       push({ kind: "error", title: t("common.exportError"), actionLabel: t("common.retry"), onAction: () => downloadSaved(id, title, fmt) })
@@ -978,7 +701,7 @@ export function Editor() {
   }
   // Draft export: save first (same validations), then download, then land on the file
   const draftExport = async (fmt: "pdf" | "excel") => {
-    const draftCells = ((qc.getQueryData(["cells", recordId]) as any[]) ?? [])
+    const draftCells = ((qc.getQueryData(queryKeys.cells(recordId)) as any[]) ?? [])
     const savable = orderedRows.filter((f: any) => !isPristineRow(f, draftCells))
     if (!savable.length && orderedRows.length) {
       setValidAlert(findRowsMissingCompany(orderedRows))
@@ -1003,7 +726,7 @@ export function Editor() {
     if (miss.length) { setValidAlert(miss); return }
     setSaveState("saving")
     try {
-      if (settings.autosave === false) {
+      if (autosave === false) {
         // Manual mode: reconcile local cache against the last server-confirmed state
         const cur = snapshotCurrent("save")
         await syncSnapshotToServer(cur, savedRef.current ?? { label: "", rows: [], cells: [], record: undefined }, true)
@@ -1014,18 +737,18 @@ export function Editor() {
         if (pending) await new Promise((r) => setTimeout(r, 550))
       }
       await Promise.all([
-        qc.refetchQueries({ queryKey: ["record", recordId] }),
-        qc.refetchQueries({ queryKey: ["rows", recordId] }),
-        qc.refetchQueries({ queryKey: ["cells", recordId] }),
-        qc.refetchQueries({ queryKey: ["stats", recordId] }),
+        qc.refetchQueries({ queryKey: queryKeys.record(recordId) }),
+        qc.refetchQueries({ queryKey: queryKeys.rows(recordId) }),
+        qc.refetchQueries({ queryKey: queryKeys.cells(recordId) }),
+        qc.refetchQueries({ queryKey: queryKeys.stats(recordId) }),
       ])
       savedRef.current = {
         label: "saved",
-        rows: qc.getQueryData(["rows", recordId]),
-        cells: qc.getQueryData(["cells", recordId]),
-        record: qc.getQueryData(["record", recordId]),
+        rows: qc.getQueryData(queryKeys.rows(recordId)),
+        cells: qc.getQueryData(queryKeys.cells(recordId)),
+        record: qc.getQueryData(queryKeys.record(recordId)),
       }
-      header.set({ dirty: false } as any)
+      setHeader({ dirty: false } as any)
       try { localStorage.removeItem(`patty-dirty-${recordId}`) } catch { /* noop */ }
       setSaveState("saved")
       push({ kind: "success", title: t("common.savedOk") })
@@ -1040,23 +763,23 @@ export function Editor() {
     if (miss.length) { setValidAlert(miss); return }
     try {
       push({ kind: "info", title: t("common.exportOk"), desc: t("records.downloadBase") })
-      const r = await api.get(`/records/${recordId}/export?format=${fmt}&lang=${i18n.language}`, { responseType: "blob" })
-      downloadBlob(r.data, exportFilename((record as any)?.title ?? t("records.downloadBase"), fmt === "pdf" ? "pdf" : "xlsx"))
+      const blob = await editorApi.exportBlob(recordId!, fmt, i18n.language)
+      downloadBlob(blob, exportFilename((record as any)?.title ?? t("records.downloadBase"), fmt === "pdf" ? "pdf" : "xlsx"))
     } catch (e: any) {
       const falt = e?.response?.data?.detail?.faltantes
       if (e?.response?.status === 422 && falt) setValidAlert(falt)
       else push({ kind: "error", title: t("common.exportError"), desc: e?.response?.data?.detail?.message ?? undefined, actionLabel: t("common.retry"), onAction: () => exportFile(fmt) })
     }
   }
-  useEffect(()=>{ if(!record || isDraft) return; header.set({ recordId: record.id, title: record.title, rowCount: (rows as any)?.length ?? 0, dirty:false } as any)}, [record?.id, (record as any)?.title, (rows as any)?.length])
-  useEffect(()=>{ if(isDraft) header.set({ rowCount: (rows as any)?.length ?? 0 } as any) }, [isDraft, (rows as any)?.length])
-  useEffect(()=>{ header.set({ onSaveTitle: (v:string)=>{ if(v!==(record as any)?.title) { pushHistory(t("editor.history.changeTitle")); header.setDirty(true); if (isDraft) draftApplyRecord({ title: v }); else persist(()=>api.put(`/records/${recordId}`,{title:v}).then(()=>qc.invalidateQueries({queryKey:["record",recordId]}))) } }, onExport: (fmt:any)=>exportFile(fmt) } as any); return ()=>{ header.set({recordId:null} as any)}}, [recordId])
+  useEffect(()=>{ if(!record || isDraft) return; setHeader({ recordId: record.id, title: record.title, rowCount: (rows as any)?.length ?? 0, dirty:false } as any)}, [record?.id, (record as any)?.title, (rows as any)?.length])
+  useEffect(()=>{ if(isDraft) setHeader({ rowCount: (rows as any)?.length ?? 0 } as any) }, [isDraft, (rows as any)?.length])
+  useEffect(()=>{ setHeader({ onSaveTitle: (v:string)=>{ if(v!==(record as any)?.title) { pushHistory(t("editor.history.changeTitle")); setHeaderDirty(true); if (isDraft) draftApplyRecord({ title: v }); else persist(()=>editorApi.patchRecord(recordId!,{title:v}).then(()=>qc.invalidateQueries({queryKey: queryKeys.record(recordId)}))) } }, onExport: (fmt:any)=>exportFile(fmt) } as any); return ()=>{ setHeader({recordId:null} as any)}}, [recordId])
   if (!recordId && !isDraft) return <div className="flex-1 p-8 space-y-3" aria-hidden><div className="h-8 w-64 rounded-lg bg-[var(--surface-2)] animate-pulse" /><div className="h-96 rounded-xl bg-[var(--surface-2)] animate-pulse" /><span className="sr-only">{t("editor.creating")}</span></div>
   if (recError || rowsError) return <div className="flex-1 p-8 text-center text-sm text-[var(--text-dim)]">{t("common.loadError")} <button onClick={() => { recRefetch(); rowsRefetch() }} className="text-[var(--accent)] font-medium hover:underline ml-1">{t("common.retry")}</button></div>
   if (!record || !rows || recPending || rowsPending) return <div className="flex-1 p-8 space-y-3" aria-hidden><div className="h-8 w-64 rounded-lg bg-[var(--surface-2)] animate-pulse" /><div className="h-96 rounded-xl bg-[var(--surface-2)] animate-pulse" /><span className="sr-only">{t("editor.loading")}</span></div>
   const cellMap=new Map<string,any>(); cells?.forEach((c:any)=>cellMap.set(`${c.row_id}-${c.year}-${c.month}`,c))
   // Drafts always render Auto header (theme color): a custom header never leaks into new files
-  const headerBg = isDraft ? "" : (settings.table_header_bg && settings.table_header_bg !== "#e0e7ff" ? settings.table_header_bg : "")
+  const headerBg = isDraft ? "" : (table_header_bg && table_header_bg !== "#e0e7ff" ? table_header_bg : "")
   const years=Array.from({length: record.period_end - record.period_start + 1}, (_,i)=>record.period_start+i)
   const monthSum = years.reduce((s: number, y: number) => s + MONTHS.reduce((a: number, _, mi: number) => a + (colWidths[monthKey(y, mi)] ?? MONTH_DEFAULT), 0), 0)
 
@@ -1069,42 +792,42 @@ export function Editor() {
   const selectedRowName = selCell ? ((orderedRows.find((f: any) => f.id === selCell.rowId) as any)?.name_snapshot ?? "") : ""
   const markRow = async (rowId: string, mark: boolean) => {
     const myColor = PERSON_COLORS[activePerson] ?? ""
-    const targets = ((qc.getQueryData(["cells", recordId]) as any[]) ?? []).filter((c: any) => c.row_id === rowId)
+    const targets = ((qc.getQueryData(queryKeys.cells(recordId)) as any[]) ?? []).filter((c: any) => c.row_id === rowId)
     if (!targets.length) return
     pushHistory(mark ? t("editor.history.markAs", { who: personName(staffNames, activePerson) }) : t("editor.history.unmark"))
-    header.setDirty(true)
-    qc.setQueryData(["cells", recordId], (old: any) => (old ?? []).map((x: any) => x.row_id === rowId ? { ...x, reviewed: mark, color: mark ? myColor : "" } : x))
+    setHeaderDirty(true)
+    qc.setQueryData(queryKeys.cells(recordId), (old: any) => (old ?? []).map((x: any) => x.row_id === rowId ? { ...x, reviewed: mark, color: mark ? myColor : "" } : x))
     try {
-      const rs = await persist(() => Promise.all(targets.map((c: any) => api.put(`/records/cells/${c.id}`, { reviewed: mark, color: mark ? myColor : "" }).catch(() => null))))
+      const rs = await persist(() => Promise.all(targets.map((c: any) => editorApi.setCell(c.id, { reviewed: mark, color: mark ? myColor : "" }).catch(() => null))))
       if (!localOnly && rs && (rs as any[]).some((r) => r === null)) mutErr(new Error("PUT cells"))
     } catch (e) { if (!localOnly) mutErr(e) }
-    qc.invalidateQueries({ queryKey: ["cells", recordId] })
-    qc.invalidateQueries({ queryKey: ["stats", recordId] })
+    qc.invalidateQueries({ queryKey: queryKeys.cells(recordId) })
+    qc.invalidateQueries({ queryKey: queryKeys.stats(recordId) })
   }
   const markYear = async (year: number, mark: boolean) => {
     const myColor = PERSON_COLORS[activePerson] ?? ""
-    const targets = ((qc.getQueryData(["cells", recordId]) as any[]) ?? []).filter((c: any) => c.year === year)
+    const targets = ((qc.getQueryData(queryKeys.cells(recordId)) as any[]) ?? []).filter((c: any) => c.year === year)
     if (!targets.length) return
     pushHistory(mark ? t("editor.history.markAs", { who: personName(staffNames, activePerson) }) : t("editor.history.unmark"))
-    header.setDirty(true)
-    qc.setQueryData(["cells", recordId], (old: any) => (old ?? []).map((x: any) => x.year === year ? { ...x, reviewed: mark, color: mark ? myColor : "" } : x))
+    setHeaderDirty(true)
+    qc.setQueryData(queryKeys.cells(recordId), (old: any) => (old ?? []).map((x: any) => x.year === year ? { ...x, reviewed: mark, color: mark ? myColor : "" } : x))
     try {
-      const rs = await persist(() => Promise.all(targets.map((c: any) => api.put(`/records/cells/${c.id}`, { reviewed: mark, color: mark ? myColor : "" }).catch(() => null))))
+      const rs = await persist(() => Promise.all(targets.map((c: any) => editorApi.setCell(c.id, { reviewed: mark, color: mark ? myColor : "" }).catch(() => null))))
       if (!localOnly && rs && (rs as any[]).some((r) => r === null)) mutErr(new Error("PUT cells"))
     } catch (e) { if (!localOnly) mutErr(e) }
-    qc.invalidateQueries({ queryKey: ["cells", recordId] })
-    qc.invalidateQueries({ queryKey: ["stats", recordId] })
+    qc.invalidateQueries({ queryKey: queryKeys.cells(recordId) })
+    qc.invalidateQueries({ queryKey: queryKeys.stats(recordId) })
   }
   const move=(idx:number,dir:-1|1)=>{
     const o=[...orderedRows]; const to=idx+dir; if(to<0||to>=o.length) return
     const tmp=o[idx]; o[idx]=o[to]; o[to]=tmp
     const next=o.map((f:any,i:number)=>({...f,position:i}))
-    const prev=qc.getQueryData(["rows",recordId])
+    const prev=qc.getQueryData(queryKeys.rows(recordId))
     pushHistory(dir===-1 ? t("editor.history.moveUp") : t("editor.history.moveDown"))
-    header.setDirty(true)
-    qc.setQueryData(["rows",recordId], next)
-    persist(() => api.post(`/records/${recordId}/rows/reorder`, {ids: next.map((f:any)=>f.id) }))
-      .catch((e)=>{ if(prev) qc.setQueryData(["rows",recordId], prev); if (!localOnly) mutErr(e) })
+    setHeaderDirty(true)
+    qc.setQueryData(queryKeys.rows(recordId), next)
+    persist(() => editorApi.reorderRows(recordId!, next.map((f:any)=>f.id) ))
+      .catch((e)=>{ if(prev) qc.setQueryData(queryKeys.rows(recordId), prev); if (!localOnly) mutErr(e) })
   }
 
   return (
@@ -1120,21 +843,21 @@ export function Editor() {
           >
             <Menu size={18} />
           </button>
-          {header.recordId || isDraft ? (
+          {headerRecordId || isDraft ? (
             <span className="flex items-center gap-2 rounded-lg bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--border-strong)] focus-within:border-[var(--accent)] pl-2.5 pr-1 py-[3px] flex-1 min-w-[110px] max-w-[380px] transition shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)]">
               <Pencil size={13} className="text-[var(--text-dim)] shrink-0" aria-hidden />
               <input
-                value={header.title}
-                onChange={e=>{ header.set({ title: e.target.value }); header.setDirty(true) }}
-                onBlur={e=>header.onSaveTitle?.(e.target.value)}
+                value={headerTitle}
+                onChange={e=>{ setHeader({ title: e.target.value }); setHeaderDirty(true) }}
+                onBlur={e=>headerOnSaveTitle?.(e.target.value)}
                 onKeyDown={e=>{ if(e.key==="Enter") (e.target as HTMLInputElement).blur() }}
                 placeholder={t("editor.fileNamePh")}
                 aria-label={t("editor.fileNameAria")}
                 className="flex-1 min-w-0 bg-transparent px-1 py-[3px] text-base font-medium text-[var(--text)] text-left truncate focus:outline-none placeholder:text-[var(--text-dim)] placeholder:font-normal cursor-text"
               />
               <span className="hidden lg:flex items-center gap-1.5 text-[12px] text-[var(--text-dim)] shrink-0">
-                <span className={`w-2 h-2 rounded-full inline-block ${header.dirty ? "bg-[var(--warning)]" : "bg-[var(--success)]"}`} />
-                {header.dirty ? t("editor.unsavedStatus") : t("editor.savedStatus")} · {t("editor.rowsCount", { count: header.rowCount })}
+                <span className={`w-2 h-2 rounded-full inline-block ${headerDirty ? "bg-[var(--warning)]" : "bg-[var(--success)]"}`} />
+                {headerDirty ? t("editor.unsavedStatus") : t("editor.savedStatus")} · {t("editor.rowsCount", { count: headerRowCount })}
               </span>
             </span>
           ) : (
@@ -1170,8 +893,8 @@ export function Editor() {
             </div>
             <span aria-hidden className="w-px h-5 bg-[var(--border)] mx-1 shrink-0" />
           </div>
-          <button onClick={saveAll} disabled={isMutating > 0 || saveState === "saving"} title={isDraft ? t("editor.draft.saveHint") : t("editor.toolbar.save")} className={`flex items-center gap-1.5 rounded-full px-4 min-h-[44px] text-[12px] font-medium transition border shrink-0 ${(isDraft || header.dirty) && saveState !== "saving" ? "bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] border-transparent" : saveState === "saved" ? "bg-[var(--accent-soft)] border-[var(--accent-border)] text-[var(--success)]" : "bg-[var(--surface)] border-[var(--border)] text-[var(--text)] hover:text-[var(--text)] hover:border-[var(--accent-border)]"} disabled:opacity-50`}>
-              {saveState === "saving" ? <><Save size={13}/><span className="hidden min-[420px]:inline">{t("editor.toolbar.saving")}</span></> : <>{saveState === "saved" && !header.dirty ? <Check size={13}/> : <Save size={13}/>}<span className="hidden min-[420px]:inline">{t("editor.toolbar.save")}</span></>}
+          <button onClick={saveAll} disabled={isMutating > 0 || saveState === "saving"} title={isDraft ? t("editor.draft.saveHint") : t("editor.toolbar.save")} className={`flex items-center gap-1.5 rounded-full px-4 min-h-[44px] text-[12px] font-medium transition border shrink-0 ${(isDraft || headerDirty) && saveState !== "saving" ? "bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] border-transparent" : saveState === "saved" ? "bg-[var(--accent-soft)] border-[var(--accent-border)] text-[var(--success)]" : "bg-[var(--surface)] border-[var(--border)] text-[var(--text)] hover:text-[var(--text)] hover:border-[var(--accent-border)]"} disabled:opacity-50`}>
+              {saveState === "saving" ? <><Save size={13}/><span className="hidden min-[420px]:inline">{t("editor.toolbar.saving")}</span></> : <>{saveState === "saved" && !headerDirty ? <Check size={13}/> : <Save size={13}/>}<span className="hidden min-[420px]:inline">{t("editor.toolbar.save")}</span></>}
           </button>
           <div ref={exportRef} className="relative shrink-0">
                           <button ref={exportBtnRef} onClick={()=>setExportOpen(!exportOpen)} title={t("editor.toolbar.export")} aria-haspopup="menu" aria-expanded={exportOpen} className="flex items-center gap-1.5 rounded-full px-4 min-h-[44px] text-[12px] font-medium bg-[var(--accent)] hover:brightness-110 text-[var(--on-accent)] transition whitespace-nowrap disabled:opacity-50">
@@ -1221,7 +944,7 @@ export function Editor() {
                   ))}
                 </span>
               </div>
-              {settings.show_summary && stats && (
+              {showSummary && stats && (
                 <div className="flex items-center gap-4 mb-4 px-3 py-2 rounded-lg bg-[var(--sheet-soft)] border border-[var(--sheet-border)] text-[11px]">
                   <span className="flex items-center gap-1.5 text-[var(--success)]"><span className="w-1.5 h-1.5 rounded-full bg-[var(--success)]"/>{t("editor.panel.summaryReviewed")} <b>{stats.reviewed}/{stats.total || rows.length}</b></span>
                   <span className="flex items-center gap-1.5 text-[var(--warning)]"><span className="w-1.5 h-1.5 rounded-full bg-[var(--warning)]"/>{t("editor.panel.summaryPending")} <b>{stats.pending}</b></span>
@@ -1235,14 +958,14 @@ export function Editor() {
                 </div>
               )}
               <div className={`overflow-auto sheet-scroll ${preview ? "pointer-events-none select-none" : ""}`}>
-                <table className={`text-xs border-collapse border border-[var(--sheet-border)] table-${settings.table_density} table-fixed`} style={{ width: "max-content" }} aria-readonly={preview || undefined}>
+                <table className={`text-xs border-collapse border border-[var(--sheet-border)] table-${tableDensity} table-fixed`} style={{ width: "max-content" }} aria-readonly={preview || undefined}>
                   <thead className="sticky top-0 z-10">
                     <tr className="bg-[var(--sheet-soft)] border-y border-[var(--sheet-border)]" style={headerBg ? { background: headerBg } : undefined}>
                       <th rowSpan={2} style={{ ...colStyle("n"), ...guideShadowX("n"), ...guideShadowY(HEADER_KEY) }} className="p-2 w-[44px] text-left text-[var(--sheet-ink)] font-semibold align-middle border-x border-[var(--sheet-border)] relative">{t("editor.table.numberCol")}{!preview && <DragHandle axis="x" title={t("editor.resize.colWidth")} zoom={zoom} startV={colWidths.n ?? 44} min={28} onV={(w)=>resizeCol("n", w)} onReset={()=>resetCol("n")} {...guideProps("x", "n")} />}{!preview && <DragHandle axis="y" title={t("editor.resize.headerHeight")} zoom={zoom} startV={headerH ?? 44} min={40} onV={(h)=>resizeRow(HEADER_KEY, h)} onReset={()=>resetRow(HEADER_KEY)} {...guideProps("y", HEADER_KEY)} />}</th>
                       <th rowSpan={2} style={{ ...colStyle("company"), ...guideShadowX("company"), ...guideShadowY(HEADER_KEY) }} className="p-2 text-center text-[var(--sheet-ink)] font-semibold min-w-[160px] align-middle border-x border-[var(--sheet-border)] relative">{t("editor.table.company")}{!preview && <DragHandle axis="x" title={t("editor.resize.colWidth")} zoom={zoom} startV={colWidths.company ?? 160} min={60} onV={(w)=>resizeCol("company", w)} onReset={()=>resetCol("company")} {...guideProps("x", "company")} />}{!preview && <DragHandle axis="y" title={t("editor.resize.headerHeight")} zoom={zoom} startV={headerH ?? 44} min={40} onV={(h)=>resizeRow(HEADER_KEY, h)} onReset={()=>resetRow(HEADER_KEY)} {...guideProps("y", HEADER_KEY)} />}</th>
                       <th colSpan={years.length * 12} style={guideShadowBlock ?? undefined} className="p-2 text-center text-[var(--sheet-ink)] font-semibold text-[12px] border-x border-[var(--sheet-border)] relative">{t("editor.table.yearMonths")}{!preview && <DragHandle axis="x" title={t("editor.resize.blockWidth")} zoom={zoom} startV={monthSum} min={16 * years.length * 12} onV={(w)=>resizeBlock(w)} onReset={()=>resetBlock()} {...guideProps("x", BLOCK_KEY)} />}</th>
-                      {settings.visible_fields.assignee && <th rowSpan={2} style={{ ...colStyle("assignee"), ...guideShadowX("assignee"), ...guideShadowY(HEADER_KEY) }} className="p-2 text-center text-[var(--sheet-ink)] font-semibold align-middle min-w-[90px] border-x border-[var(--sheet-border)] relative">{t("editor.table.responsible")}{!preview && <DragHandle axis="x" title={t("editor.resize.colWidth")} zoom={zoom} startV={colWidths.assignee ?? 90} min={60} onV={(w)=>resizeCol("assignee", w)} onReset={()=>resetCol("assignee")} {...guideProps("x", "assignee")} />}{!preview && <DragHandle axis="y" title={t("editor.resize.headerHeight")} zoom={zoom} startV={headerH ?? 44} min={40} onV={(h)=>resizeRow(HEADER_KEY, h)} onReset={()=>resetRow(HEADER_KEY)} {...guideProps("y", HEADER_KEY)} />}</th>}
-                      {settings.visible_fields.notes && <th rowSpan={2} style={{ ...colStyle("notes"), ...guideShadowX("notes"), ...guideShadowY(HEADER_KEY) }} className="p-2 text-center text-[var(--sheet-ink)] font-semibold align-middle min-w-[140px] border-x border-[var(--sheet-border)] relative">{t("editor.table.notes")}{!preview && <DragHandle axis="x" title={t("editor.resize.colWidth")} zoom={zoom} startV={colWidths.notes ?? 140} min={60} onV={(w)=>resizeCol("notes", w)} onReset={()=>resetCol("notes")} {...guideProps("x", "notes")} />}{!preview && <DragHandle axis="y" title={t("editor.resize.headerHeight")} zoom={zoom} startV={headerH ?? 44} min={40} onV={(h)=>resizeRow(HEADER_KEY, h)} onReset={()=>resetRow(HEADER_KEY)} {...guideProps("y", HEADER_KEY)} />}</th>}
+                      {visibleFields.assignee && <th rowSpan={2} style={{ ...colStyle("assignee"), ...guideShadowX("assignee"), ...guideShadowY(HEADER_KEY) }} className="p-2 text-center text-[var(--sheet-ink)] font-semibold align-middle min-w-[90px] border-x border-[var(--sheet-border)] relative">{t("editor.table.responsible")}{!preview && <DragHandle axis="x" title={t("editor.resize.colWidth")} zoom={zoom} startV={colWidths.assignee ?? 90} min={60} onV={(w)=>resizeCol("assignee", w)} onReset={()=>resetCol("assignee")} {...guideProps("x", "assignee")} />}{!preview && <DragHandle axis="y" title={t("editor.resize.headerHeight")} zoom={zoom} startV={headerH ?? 44} min={40} onV={(h)=>resizeRow(HEADER_KEY, h)} onReset={()=>resetRow(HEADER_KEY)} {...guideProps("y", HEADER_KEY)} />}</th>}
+                      {visibleFields.notes && <th rowSpan={2} style={{ ...colStyle("notes"), ...guideShadowX("notes"), ...guideShadowY(HEADER_KEY) }} className="p-2 text-center text-[var(--sheet-ink)] font-semibold align-middle min-w-[140px] border-x border-[var(--sheet-border)] relative">{t("editor.table.notes")}{!preview && <DragHandle axis="x" title={t("editor.resize.colWidth")} zoom={zoom} startV={colWidths.notes ?? 140} min={60} onV={(w)=>resizeCol("notes", w)} onReset={()=>resetCol("notes")} {...guideProps("x", "notes")} />}{!preview && <DragHandle axis="y" title={t("editor.resize.headerHeight")} zoom={zoom} startV={headerH ?? 44} min={40} onV={(h)=>resizeRow(HEADER_KEY, h)} onReset={()=>resetRow(HEADER_KEY)} {...guideProps("y", HEADER_KEY)} />}</th>}
                     </tr>
                     <tr style={{ ...(headerBg ? { background: headerBg } : null), ...(headerH ? { height: headerH } : null) }} className="bg-[var(--sheet-soft)] border-b border-[var(--sheet-border)]">
                       {years.map((y, yi)=>(
@@ -1257,7 +980,7 @@ export function Editor() {
                   </thead>
                   <tbody>
                     {rows.length===0 ? (
-                      <tr><td colSpan={2 + years.length*12 + (settings.visible_fields.assignee?1:0) + (settings.visible_fields.notes?1:0)} className="p-12 text-center text-[var(--text-dim)]"><div className="text-sm">{t("editor.table.blank")}</div></td></tr>
+                      <tr><td colSpan={2 + years.length*12 + (visibleFields.assignee?1:0) + (visibleFields.notes?1:0)} className="p-12 text-center text-[var(--text-dim)]"><div className="text-sm">{t("editor.table.blank")}</div></td></tr>
                     ) : (
                       rows.slice().sort((a:any,b:any)=>a.position-b.position).map((row:any, idx:number)=>(
                         <tr key={row.id} style={rowHeights[row.id] ? { height: rowHeights[row.id] } : undefined} className="border-t border-b border-[var(--sheet-border)] hover:bg-[var(--sheet-soft)]">
@@ -1291,12 +1014,12 @@ export function Editor() {
                               </div>
                             </td>
                           ))}
-                          {settings.visible_fields.assignee && (
+                          {visibleFields.assignee && (
                             <td className="p-0 min-w-[90px] border-x border-[var(--sheet-border)]" style={{ ...colStyle("assignee"), ...guideShadowX("assignee"), ...guideShadowY(row.id) }}>
                               <RowTextCell field="assignee" row={row} onSave={v=>updateRow.mutate({ rowId: row.id, patch:{assignee: v } })} />
                             </td>
                           )}
-                          {settings.visible_fields.notes && (
+                          {visibleFields.notes && (
                             <td className="p-0 min-w-[140px] border-x border-[var(--sheet-border)]" style={{ ...colStyle("notes"), ...guideShadowX("notes"), ...guideShadowY(row.id) }}>
                               <RowTextCell field="note" row={row} onSave={v=>updateRow.mutate({ rowId: row.id, patch:{note: v } })} />
                             </td>
@@ -1456,8 +1179,8 @@ export function Editor() {
             <div className="flex justify-between text-xs"><span className="text-[var(--text-dim)]">{t("editor.panel.total")}</span><span className="text-[var(--text)] font-medium">{t("editor.panel.totalMeta", { rows: rows.length, years: years.length })}</span></div>
             <div className="border-t border-[var(--border)] pt-2 space-y-2">
               <div className="text-[10px] text-[var(--text-dim)]">{t("editor.panel.visibleColumns")}</div>
-              <label className="flex items-center justify-between text-xs text-[var(--text-dim)] cursor-pointer min-h-[44px]">{t("editor.panel.responsible")}<input type="checkbox" checked={settings.visible_fields.assignee} onChange={e=>settings.set({visible_fields:{...settings.visible_fields,assignee:e.target.checked}})} className="w-6 h-6 accent-[var(--sheet-accent)] cursor-pointer" /></label>
-              <label className="flex items-center justify-between text-xs text-[var(--text-dim)] cursor-pointer min-h-[44px]">{t("editor.panel.notes")}<input type="checkbox" checked={settings.visible_fields.notes} onChange={e=>settings.set({visible_fields:{...settings.visible_fields,notes:e.target.checked}})} className="w-6 h-6 accent-[var(--sheet-accent)] cursor-pointer" /></label>
+              <label className="flex items-center justify-between text-xs text-[var(--text-dim)] cursor-pointer min-h-[44px]">{t("editor.panel.responsible")}<input type="checkbox" checked={visibleFields.assignee} onChange={e=>setSettings({visible_fields:{...visibleFields,assignee:e.target.checked}})} className="w-6 h-6 accent-[var(--sheet-accent)] cursor-pointer" /></label>
+              <label className="flex items-center justify-between text-xs text-[var(--text-dim)] cursor-pointer min-h-[44px]">{t("editor.panel.notes")}<input type="checkbox" checked={visibleFields.notes} onChange={e=>setSettings({visible_fields:{...visibleFields,notes:e.target.checked}})} className="w-6 h-6 accent-[var(--sheet-accent)] cursor-pointer" /></label>
             </div>
           </div>
           </>
@@ -1465,11 +1188,11 @@ export function Editor() {
           <>
           <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-3 space-y-3">
             <div className="text-[12px] font-medium text-[var(--text)] flex items-center gap-1.5"><Palette size={12}/> {t("editor.panel.styles")}</div>
-            <div className="flex items-center justify-between"><span className="text-[11px] text-[var(--text-dim)]">{t("editor.panel.sheetColor")}</span><Button onClick={()=>settings.set({primary_color:""})} aria-pressed={!settings.primary_color || ["#6366f1","#EC4899","#ec4899"].includes(settings.primary_color)} title={t("editor.panel.followAccent")} className="h-6 px-2.5 rounded-full text-[11px] bg-[var(--surface-2)] text-[var(--text-dim)] hover:text-[var(--text)] border border-[var(--border)]">{t("editor.panel.auto")}</Button></div>
-            <div className="flex items-center justify-between"><span className="text-[11px] text-[var(--text-dim)]">{t("editor.panel.custom")}</span><div className="flex items-center gap-1.5 bg-[var(--bg)] border border-[var(--border)] focus-within:border-[var(--accent)] rounded-lg px-2 py-1 w-[148px] justify-between relative"><span className="w-4 h-4 rounded" style={{background: settings.primary_color || "var(--accent)"}}/><span className="text-[11px] text-[var(--text)]">{settings.primary_color || t("editor.panel.themed")}</span><input type="color" aria-label={t("editor.panel.customSheetColor")} value={settings.primary_color || "#EC4899"} onChange={e=>settings.set({primary_color:e.target.value})} className="absolute inset-0 opacity-0 cursor-pointer" /></div></div>
+            <div className="flex items-center justify-between"><span className="text-[11px] text-[var(--text-dim)]">{t("editor.panel.sheetColor")}</span><Button onClick={()=>setSettings({primary_color:""})} aria-pressed={!primaryColor || ["#6366f1","#EC4899","#ec4899"].includes(primaryColor)} title={t("editor.panel.followAccent")} className="h-6 px-2.5 rounded-full text-[11px] bg-[var(--surface-2)] text-[var(--text-dim)] hover:text-[var(--text)] border border-[var(--border)]">{t("editor.panel.auto")}</Button></div>
+            <div className="flex items-center justify-between"><span className="text-[11px] text-[var(--text-dim)]">{t("editor.panel.custom")}</span><div className="flex items-center gap-1.5 bg-[var(--bg)] border border-[var(--border)] focus-within:border-[var(--accent)] rounded-lg px-2 py-1 w-[148px] justify-between relative"><span className="w-4 h-4 rounded" style={{background: primaryColor || "var(--accent)"}}/><span className="text-[11px] text-[var(--text)]">{primaryColor || t("editor.panel.themed")}</span><input type="color" aria-label={t("editor.panel.customSheetColor")} value={primaryColor || "#EC4899"} onChange={e=>setSettings({primary_color:e.target.value})} className="absolute inset-0 opacity-0 cursor-pointer" /></div></div>
             <div className="flex gap-1.5 flex-wrap">
               {["#EC4899","#8b5cf6","#06b6d4","#10b981","#f59e0b","#ef4444"].map(c=>(
-                <button key={c} title={c} aria-label={t("editor.panel.colorValue", { hex: c })} aria-pressed={settings.primary_color===c} onClick={()=>settings.set({primary_color:c})} className="w-10 h-10 rounded-full border-2" style={{background:c, borderColor: settings.primary_color===c ? "white" : "var(--border)", boxShadow: settings.primary_color===c ? "0 0 0 2px var(--accent)" : "none"}}/>
+                <button key={c} title={c} aria-label={t("editor.panel.colorValue", { hex: c })} aria-pressed={primaryColor===c} onClick={()=>setSettings({primary_color:c})} className="w-10 h-10 rounded-full border-2" style={{background:c, borderColor: primaryColor===c ? "white" : "var(--border)", boxShadow: primaryColor===c ? "0 0 0 2px var(--accent)" : "none"}}/>
               ))}
             </div>
           </div>
@@ -1477,17 +1200,17 @@ export function Editor() {
           <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-3 space-y-2">
             <div className="text-[12px] font-medium text-[var(--text)] flex items-center gap-1.5"><FileText size={12}/> {t("editor.panel.tableLook")}</div>
             <label className="flex items-center justify-between text-xs text-[var(--text-dim)]">{t("editor.panel.density")}
-              <select value={settings.table_density} onChange={e=>settings.set({table_density:e.target.value as any})} className="bg-[var(--bg)] border border-[var(--border)] rounded-lg px-2 py-1 min-h-[44px] text-base text-[var(--text)]">
+              <select value={tableDensity} onChange={e=>setSettings({table_density:e.target.value as any})} className="bg-[var(--bg)] border border-[var(--border)] rounded-lg px-2 py-1 min-h-[44px] text-base text-[var(--text)]">
                 <option value="compact">{t("editor.panel.densityCompact")}</option><option value="normal">{t("editor.panel.densityNormal")}</option><option value="comfortable">{t("editor.panel.densityComfortable")}</option>
               </select>
             </label>
-            <label className="flex items-center justify-between text-xs text-[var(--text-dim)]">{t("editor.panel.summary")}<input type="checkbox" checked={settings.show_summary} onChange={e=>settings.set({show_summary:e.target.checked})} className="accent-[var(--sheet-accent)]" /></label>
+            <label className="flex items-center justify-between text-xs text-[var(--text-dim)]">{t("editor.panel.summary")}<input type="checkbox" checked={showSummary} onChange={e=>setSettings({show_summary:e.target.checked})} className="accent-[var(--sheet-accent)]" /></label>
             <button type="button" onClick={()=>patchDesign("table", (p)=>({ ...p, cols: {}, rows: {} }))} className="w-full min-h-[44px] rounded-lg border border-[var(--border)] bg-[var(--bg)] text-[var(--text)] text-sm font-medium hover:border-[var(--accent)] transition">{t("editor.panel.resetLayout")}</button>
           </div>
 
           <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-3 space-y-2">
-            <div className="text-[12px] font-medium text-[var(--text)] flex items-center justify-between">{t("editor.panel.headerBg")}<Button onClick={()=>settings.set({table_header_bg:""})} aria-pressed={!headerBg} title={t("editor.panel.followAccent")} className="h-6 px-2.5 rounded-full text-[11px] bg-[var(--surface-2)] text-[var(--text-dim)] hover:text-[var(--text)] border border-[var(--border)]">{t("editor.panel.auto")}</Button></div>
-            <div className="flex items-center gap-2"><span className="w-6 h-6 rounded border" style={{background: headerBg || "var(--sheet-soft)"}}/><input type="color" aria-label={t("editor.panel.headerBgAria")} value={headerBg || "#EC4899"} onChange={e=>settings.set({table_header_bg:e.target.value})} className="flex-1 h-8 bg-transparent cursor-pointer" /><span className="text-xs text-[var(--text-dim)]">{headerBg || t("editor.panel.auto")}</span></div>
+            <div className="text-[12px] font-medium text-[var(--text)] flex items-center justify-between">{t("editor.panel.headerBg")}<Button onClick={()=>setSettings({table_header_bg:""})} aria-pressed={!headerBg} title={t("editor.panel.followAccent")} className="h-6 px-2.5 rounded-full text-[11px] bg-[var(--surface-2)] text-[var(--text-dim)] hover:text-[var(--text)] border border-[var(--border)]">{t("editor.panel.auto")}</Button></div>
+            <div className="flex items-center gap-2"><span className="w-6 h-6 rounded border" style={{background: headerBg || "var(--sheet-soft)"}}/><input type="color" aria-label={t("editor.panel.headerBgAria")} value={headerBg || "#EC4899"} onChange={e=>setSettings({table_header_bg:e.target.value})} className="flex-1 h-8 bg-transparent cursor-pointer" /><span className="text-xs text-[var(--text-dim)]">{headerBg || t("editor.panel.auto")}</span></div>
           </div>
           </>
           )}
