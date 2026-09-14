@@ -1,8 +1,8 @@
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { api } from "@/lib/api"
 import { apiError } from "@/lib/errors"
+import { authApi } from "@/shared/api/auth"
 import { useNavigate, Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,17 +15,14 @@ export function Register() {
   const { t } = useTranslation()
   const schema = useMemo(() => z.object({ full_name: z.string().min(2, t("auth.register.minName")), email: z.string().email(t("auth.register.invalidEmail")), password: z.string().min(6, t("auth.register.minChars")) }), [t])
   const nav = useNavigate()
-  const { setAuth } = useAuthStore()
+  const setAuth = useAuthStore(s => s.setAuth)
   const [err,setErr]=useState("")
   const [showPw, setShowPw] = useState(false)
   const { register, handleSubmit, formState: { isSubmitting, errors } } = useForm({ resolver: zodResolver(schema) })
-  const onSubmit = async (v:any) => {
+  const onSubmit = async (v: { email: string; password: string; full_name: string }) => {
     try {
-      await api.post("/auth/register", v)
-      const r = await api.post("/auth/login", { email: v.email, password: v.password })
-      const me = await api.get("/auth/me", { headers:{ Authorization:`Bearer ${r.data.access_token}`}})
-      localStorage.setItem("refresh_token", r.data.refresh_token)
-      setAuth(r.data.access_token, me.data); nav("/")
+      const s = await authApi.register(v)
+      setAuth(s.access_token, s.user, s.refresh_token); nav("/")
     } catch(e:any){ setErr(apiError(t, e.response?.data?.detail, "auth.register.registerError")) }
   }
   return (

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom"
 import { Layout } from "./components/Layout"
 import { Login } from "./pages/Login"
 import { Register } from "./pages/Register"
@@ -10,13 +10,26 @@ import { Settings } from "./pages/Settings"
 import { useAuthStore } from "./stores/auth"
 import { useEffect } from "react"
 import { useSettingsStore } from "./stores/settings"
-import { api } from "./lib/api"
+import { AUTH_LOGOUT_EVENT } from "./lib/api"
+import { settingsApi } from "./shared/api/settings"
 import { applyLanguage } from "./i18n"
 
 function Protected({ children }: { children: React.ReactNode }) {
-  const { token } = useAuthStore()
-  if (!token) return <Navigate to="/login" replace />
+  const token = useAuthStore(s => s.token)
+  const location = useLocation()
+  if (!token) return <Navigate to="/login" replace state={{ from: location.pathname }} />
   return <>{children}</>
+}
+
+/** Puente SPA: el interceptor 401 emite el evento, aqui navegamos sin reload. */
+function AuthEvents() {
+  const nav = useNavigate()
+  useEffect(() => {
+    const h = () => nav("/login", { replace: true })
+    window.addEventListener(AUTH_LOGOUT_EVENT, h)
+    return () => window.removeEventListener(AUTH_LOGOUT_EVENT, h)
+  }, [nav])
+  return null
 }
 
 export default function App() {
@@ -26,8 +39,8 @@ export default function App() {
     init()
     apply()
     if (useAuthStore.getState().token) {
-      api.get("/settings").then(r => {
-        const lng = r.data?.language
+      settingsApi.get().then(r => {
+        const lng = r?.language
         if (lng === "es" || lng === "en") applyLanguage(lng)
       }).catch(()=>{})
     }
@@ -35,6 +48,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <AuthEvents />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />

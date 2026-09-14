@@ -1,7 +1,7 @@
 import hashlib
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,20 @@ router = APIRouter(tags=["attachments"])
 
 ALLOWED_MIME = {"image/jpeg", "image/png", "image/webp", "application/pdf"}
 EXT = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "application/pdf": ".pdf"}
+_CHUNK = 1024 * 1024
+
+
+def _sniff_mime(head: bytes) -> str | None:
+    """Detecta el tipo real por magic bytes (no confia en el header del cliente)."""
+    if head.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if head.startswith(b"RIFF") and head[8:12] == b"WEBP":
+        return "image/webp"
+    if head.startswith(b"%PDF"):
+        return "application/pdf"
+    return None
 
 
 def _record_or_404(record_id: str, db: Session, user: User) -> Record:
@@ -48,18 +62,36 @@ def _out(a: Attachment, dedup: bool = False) -> dict:
 def upload(
     record_id: str,
     file: UploadFile,
+    request: Request,
     device_id: str | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     _record_or_404(record_id, db, user)
-    mime = (file.content_type or "").split(";")[0].strip().lower()
-    if mime not in ALLOWED_MIME:
-        raise HTTPException(400, {"code": "MIME_INVALID", "message": "Tipo no permitido"})
-    data = file.file.read()
     max_bytes = settings.MAX_UPLOAD_MB * 1024 * 1024
-    if len(data) > max_bytes:
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > max_bytes + 1024 * 1024:
         raise HTTPException(400, {"code": "FILE_TOO_LARGE", "message": "Archivo muy grande"})
+    claimed = (file.content_type or "").split(";")[0].strip().lower()
+    if claimed not in ALLOWED_MIME:
+        raise HTTPException(400, {"code": "MIME_INVALID", "message": "Tipo no permitido"})
+    # Lectura acotada por chunks: nunca se carga mas de max_bytes en RAM.
+    chunks: list[bytes] = []
+    size = 0
+    while True:
+        part = file.file.read(_CHUNK)
+        if not part:
+            break
+        size += len(part)
+        if size > max_bytes:
+            raise HTTPException(400, {"code": "FILE_TOO_LARGE", "message": "Archivo muy grande"})
+        chunks.append(part)
+    data = b"".join(chunks)
+    if not data:
+        raise HTTPException(400, {"code": "FILE_EMPTY", "message": "Archivo vacio"})
+    mime = _sniff_mime(data[:16])
+    if mime is None or mime != claimed:
+        raise HTTPException(400, {"code": "MIME_MISMATCH", "message": "El contenido no coincide"})
     digest = hashlib.sha256(data).hexdigest()
     existing = (
         db.query(Attachment)
@@ -68,7 +100,7 @@ def upload(
     )
     if existing:
         return _out(existing, dedup=True)
-    directory = Path(settings.ATTACH_DIR) / record_id
+    directory = Path(settings.attach_path) / record_id
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{digest}{EXT[mime]}"
     path.write_bytes(data)
@@ -102,7 +134,7 @@ def content(
         raise HTTPException(404, {"code": "ATTACHMENT_NOT_FOUND", "message": "Not found"})
     _record_or_404(a.record_id, db, user)
     for ext in (".jpg", ".png", ".webp", ".pdf"):
-        path = Path(settings.ATTACH_DIR) / a.record_id / f"{a.hash}{ext}"
+        path = Path(settings.attach_path) / a.record_id / f"{a.hash}{ext}"
         if path.exists():
             return FileResponse(path, media_type=a.mime)
     raise HTTPException(404, {"code": "ATTACHMENT_FILE_MISSING", "message": "Missing file"})

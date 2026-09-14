@@ -30,10 +30,11 @@ def validate_staff(n) -> dict | None:
 
 def sanitize_staff_names(names) -> list[str]:
     """Nombres del equipo, posicionales: trim, max 24 caracteres, max 10.
-    "" significa sin nombre (se muestra P{i+1}); se conservan posiciones."""
+    "" significa sin nombre (se muestra P{i+1}); se conservan posiciones.
+    Alineado con TS: solo strings se conservan (0/False/None -> "")."""
     if not isinstance(names, list):
         return []
-    return [str(n or "").strip()[:24] for n in names[:10]]
+    return [(n.strip()[:24] if isinstance(n, str) else "") for n in names[:10]]
 
 
 def validate_staff_names(names) -> dict | None:
@@ -41,7 +42,10 @@ def validate_staff_names(names) -> dict | None:
         return {"code": "STAFF_NAMES_INVALID", "message": "staff_names must be a list of max 10"}
     for n in names:
         if not isinstance(n, str) or len(n) > 24:
-            return {"code": "STAFF_NAMES_INVALID", "message": "each name must be a string of max 24 chars"}
+            return {
+                "code": "STAFF_NAMES_INVALID",
+                "message": "each name must be a string of max 24 chars",
+            }
     return None
 
 

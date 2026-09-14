@@ -1,9 +1,11 @@
 {
     "cSpell.words": [
         "autoflush",
+        "foliora",
         "Foliora",
         "ondelete",
         "onupdate",
+        "pytest",
         "sessionmaker",
         "venv"
     ],

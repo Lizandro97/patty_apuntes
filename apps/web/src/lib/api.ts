@@ -1,4 +1,8 @@
 import axios from "axios"
+import { useAuthStore } from "@/stores/auth"
+
+/** Evento SPA para expirar sesión sin hard-reload (App lo escucha). */
+export const AUTH_LOGOUT_EVENT = "auth:logout"
 
 // Fase 0/4 LAN: en build se puede fijar VITE_API_URL (p. ej.
 // http://foliora.local:8000/api); por defecto mismo origen /api.
@@ -13,10 +17,10 @@ api.interceptors.request.use((config) => {
 })
 
 function logout() {
-  localStorage.removeItem("token")
-  localStorage.removeItem("refresh_token")
+  useAuthStore.getState().logout()
   if (location.pathname !== "/login" && location.pathname !== "/register") {
-    location.href = "/login"
+    // Navegación SPA vía App (sin hard-reload que pierde estado).
+    window.dispatchEvent(new CustomEvent(AUTH_LOGOUT_EVENT))
   }
 }
 

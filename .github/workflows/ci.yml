@@ -1,0 +1,41 @@
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: pip install -r apps/backend/requirements.txt
+      - run: pip install ruff pytest httpx email-validator
+      - run: python -m ruff check apps/backend/app apps/backend/tests
+        working-directory: .
+      - run: python -m ruff format --check apps/backend/app apps/backend/tests
+      - run: python -m pytest apps/backend/tests -q
+        working-directory: .
+
+  packages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun test packages/
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+        working-directory: apps/web
+      - run: bun run lint
+        working-directory: apps/web
+      - run: bun test src/
+        working-directory: apps/web
+      - run: bun run build
+        working-directory: apps/web

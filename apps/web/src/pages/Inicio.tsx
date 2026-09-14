@@ -1,24 +1,21 @@
 import { useQuery } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
-import { api } from "@/lib/api"
 import { Link } from "react-router-dom"
 import { ArrowUpRight, Files } from "lucide-react"
+import { queryKeys } from "@/shared/queryKeys"
+import { recordsApi } from "@/shared/api/records"
+import { companiesApi } from "@/shared/api/companies"
+import { syncApi } from "@/shared/api/sync"
+import { fmtDate } from "@/shared/format"
 
 export function Inicio() {
   const { t, i18n } = useTranslation()
-  const { data: recordsData, isPending: recPending, isError: recError, refetch: recRefetch } = useQuery({ queryKey:["records"], queryFn: async()=> (await api.get("/records")).data })
-  const { data: companies } = useQuery({ queryKey:["companies"], queryFn: async()=> (await api.get("/companies")).data })
+  const { data: recordsData, isPending: recPending, isError: recError, refetch: recRefetch } = useQuery({ queryKey: queryKeys.records, queryFn: recordsApi.list })
+  const { data: companies } = useQuery({ queryKey: queryKeys.companies, queryFn: companiesApi.list })
   // Fase 4: badge honesto desde el servidor (revision global real).
-  const { data: syncStatus, isPending: syncPending, isError: syncError, refetch: syncRefetch } = useQuery({ queryKey:["sync-status"], queryFn: async()=> (await api.get("/sync/status")).data })
+  const { data: syncStatus, isPending: syncPending, isError: syncError, refetch: syncRefetch } = useQuery({ queryKey: queryKeys.syncStatus, queryFn: syncApi.status })
   const list = recordsData ?? []
   const total = list.length
-  const fmtDate = (d: string) => {
-    try {
-      return new Date(d).toLocaleDateString(i18n.language === "en" ? "en-US" : "es-PE")
-    } catch {
-      return d
-    }
-  }
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[var(--bg)] p-6 overflow-auto">
@@ -66,12 +63,12 @@ export function Inicio() {
             <div className="text-sm text-[var(--text-dim)] py-8 text-center border border-dashed border-[var(--border)] rounded-xl">{t("home.empty")}</div>
           ) : (
             <div className="space-y-2">
-              {list.slice(0, 50).map((a:any)=> (
+              {list.slice(0, 50).map((a: { id: string; title: string; period_start: number; period_end: number; updated_at: string; progress?: number })=> (
                 <div key={a.id} className="flex items-center gap-4 p-3 rounded-xl bg-[var(--bg)] border border-[var(--border)] hover:border-[var(--accent-border)] hover:bg-[var(--surface-2)] transition">
                   <div className="w-9 h-9 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] grid place-items-center text-[var(--text-dim)]"><Files size={16}/></div>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium truncate text-[var(--text)] text-sm">{a.title}</div>
-                    <div className="text-xs text-[var(--text-dim)]">{a.period_start} — {a.period_end} • {fmtDate(a.updated_at)}</div>
+                    <div className="text-xs text-[var(--text-dim)]">{a.period_start} — {a.period_end} • {fmtDate(a.updated_at, i18n.language)}</div>
                     <div className="mt-2 h-1.5 bg-[var(--bg)] border border-[var(--border)] rounded-full overflow-hidden" role="progressbar" aria-valuenow={a.progress ?? 0} aria-valuemin={0} aria-valuemax={100} aria-label={t("home.progressLabel", { progress: a.progress ?? 0 })}><div className="h-full bg-[var(--accent)]" style={{width: `${a.progress ?? 0}%`}}/></div>
                   </div>
                   <div className="text-sm font-bold text-[var(--accent)]">{a.progress ?? 0}%</div>

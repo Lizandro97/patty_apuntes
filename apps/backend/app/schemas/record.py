@@ -1,15 +1,51 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.schemas.settings import SettingsOut, SettingsUpdate
+
+__all__ = [
+    "RecordCreate",
+    "RecordUpdate",
+    "RecordOut",
+    "RecordRowOut",
+    "RecordRowCreate",
+    "RecordRowUpdate",
+    "CellOut",
+    "CellUpdate",
+    "CellBulkUpdate",
+    "LayoutOut",
+    "LayoutUpdate",
+    # Re-export por compat (ubicacion canonica: app.schemas.settings).
+    "SettingsUpdate",
+    "SettingsOut",
+]
+
+MIN_YEAR, MAX_YEAR = 1900, 2100
 
 
 class RecordCreate(BaseModel):
-    title: str
+    title: str = Field(min_length=1)
     review_type: str = ""
     period_start: int = Field(default_factory=lambda: date.today().year)
     period_end: int = Field(default_factory=lambda: date.today().year)
-    staff_count: int | None = 2
+    staff_count: int | None = Field(default=2, ge=1, le=50)
     staff_names: list[str] | None = None
+
+    @field_validator("title")
+    @classmethod
+    def _strip_title(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("title vacio")
+        return v
+
+    @field_validator("period_start", "period_end")
+    @classmethod
+    def _year_range(cls, v: int) -> int:
+        if not MIN_YEAR <= v <= MAX_YEAR:
+            raise ValueError(f"año fuera de rango {MIN_YEAR}-{MAX_YEAR}")
+        return v
 
 
 class RecordUpdate(BaseModel):
@@ -22,6 +58,8 @@ class RecordUpdate(BaseModel):
 
 
 class RecordOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     title: str
     review_type: str
@@ -33,11 +71,10 @@ class RecordOut(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 class RecordRowOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     record_id: str
     company_id: str | None
@@ -45,9 +82,6 @@ class RecordRowOut(BaseModel):
     position: int
     assignee: str | None = None
     note: str | None = None
-
-    class Config:
-        from_attributes = True
 
 
 class RecordRowCreate(BaseModel):
@@ -64,6 +98,8 @@ class RecordRowUpdate(BaseModel):
 
 
 class CellOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     record_id: str
     row_id: str
@@ -77,9 +113,6 @@ class CellOut(BaseModel):
     color: str | None = None
     style: dict | None = None
 
-    class Config:
-        from_attributes = True
-
 
 class CellUpdate(BaseModel):
     reviewed: bool | None = None
@@ -90,52 +123,20 @@ class CellUpdate(BaseModel):
 
 
 class CellBulkUpdate(BaseModel):
-    ids: list[str]
+    ids: list[str] = Field(min_length=1)
     color: str | None = None
     style: dict | None = None
     reviewed: bool | None = None
 
 
 class LayoutOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     section: str
     payload: dict
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class LayoutUpdate(BaseModel):
     section: str
     payload: dict
-
-
-class SettingsUpdate(BaseModel):
-    primary_color: str | None = None
-    font_family: str | None = None
-    font_size_px: int | None = None
-    table_density: str | None = None
-    grid_columns: int | None = None
-    show_summary: bool | None = None
-    rounded_borders: bool | None = None
-    pastel_mode: bool | None = None
-    visible_fields: dict | None = None
-    table_header_bg: str | None = None
-    language: str | None = None
-
-
-class SettingsOut(BaseModel):
-    primary_color: str
-    font_family: str
-    font_size_px: int
-    table_density: str
-    grid_columns: int
-    show_summary: bool
-    rounded_borders: bool
-    pastel_mode: bool
-    visible_fields: dict
-    table_header_bg: str
-    language: str
-
-    class Config:
-        from_attributes = True

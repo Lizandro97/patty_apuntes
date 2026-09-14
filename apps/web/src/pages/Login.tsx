@@ -1,8 +1,8 @@
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { api } from "@/lib/api"
 import { apiError } from "@/lib/errors"
+import { authApi } from "@/shared/api/auth"
 import { useAuthStore } from "@/stores/auth"
 import { useNavigate, Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
@@ -14,18 +14,16 @@ import { ArrowUpRight, Eye, EyeOff, ShieldCheck } from "lucide-react"
 export function Login() {
   const { t } = useTranslation()
   const schema = useMemo(() => z.object({ email: z.string().email(t("auth.login.invalidEmail")), password: z.string().min(6, t("auth.login.minChars")) }), [t])
-  const { setAuth } = useAuthStore()
+  const setAuth = useAuthStore(s => s.setAuth)
   const nav = useNavigate()
   const [err, setErr] = useState("")
   const [showPw, setShowPw] = useState(false)
   const { register, handleSubmit, formState: { isSubmitting, errors } } = useForm({ resolver: zodResolver(schema) })
 
-  const onSubmit = async (v: any) => {
+  const onSubmit = async (v: { email: string; password: string }) => {
     try {
-      const r = await api.post("/auth/login", v)
-      const me = await api.get("/auth/me", { headers: { Authorization: `Bearer ${r.data.access_token}` } })
-      localStorage.setItem("refresh_token", r.data.refresh_token)
-      setAuth(r.data.access_token, me.data)
+      const s = await authApi.login(v)
+      setAuth(s.access_token, s.user, s.refresh_token)
       nav("/")
     } catch (e:any) { setErr(apiError(t, e.response?.data?.detail, "auth.login.loginError")) }
   }

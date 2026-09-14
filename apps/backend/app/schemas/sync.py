@@ -1,4 +1,6 @@
-from pydantic import BaseModel, Field
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PushIn(BaseModel):
@@ -32,12 +34,11 @@ class StatusOut(BaseModel):
 
 
 class DeviceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     name: str
     revoked: bool
-
-    class Config:
-        from_attributes = True
 
 
 class PairingOut(BaseModel):
@@ -56,7 +57,7 @@ class ClaimOut(BaseModel):
 
 class ResolveIn(BaseModel):
     client_uuid: str
-    strategy: str  # merge | mine | theirs
+    strategy: Literal["merge", "mine", "theirs"]
     doc: dict | None = None
 
 

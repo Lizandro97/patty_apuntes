@@ -1,7 +1,7 @@
 import { useSettingsStore } from "@/stores/settings"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { api } from "@/lib/api"
+import { settingsApi } from "@/shared/api/settings"
 import { useToast } from "@/lib/toast"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -21,9 +21,16 @@ export function Settings() {
 
   useEffect(() => {
     setLoading(true)
-    api.get("/settings").then(r => {
-      settings.set(r.data)
-      if (r.data?.language === "es" || r.data?.language === "en") setLang(r.data.language)
+    settingsApi.get().then(r => {
+      // Solo claves del store: el DTO trae id/user_id/updated_at/language
+      // que no pertenecen al estado local (antes se volcaba todo).
+      const { primary_color, font_family, font_size_px, table_density, grid_columns,
+        show_summary, rounded_borders, pastel_mode, visible_fields, table_header_bg } = r ?? {}
+      settings.set({
+        primary_color, font_family, font_size_px, table_density, grid_columns,
+        show_summary, rounded_borders, pastel_mode, visible_fields, table_header_bg,
+      })
+      if (r?.language === "es" || r?.language === "en") setLang(r.language)
       setLoadError(false)
     }).catch(() => setLoadError(true)).finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -31,21 +38,24 @@ export function Settings() {
 
   const markDirty = (fn: () => void) => { fn(); setDirty(true) }
 
+  const serverPayload = () => ({
+    primary_color: settings.primary_color,
+    font_family: settings.font_family,
+    font_size_px: settings.font_size_px,
+    table_density: settings.table_density,
+    grid_columns: settings.grid_columns,
+    show_summary: settings.show_summary,
+    rounded_borders: settings.rounded_borders,
+    pastel_mode: settings.pastel_mode,
+    visible_fields: settings.visible_fields,
+    table_header_bg: settings.table_header_bg,
+    language: lang,
+  })
+
   const save = async () => {
     setSaving(true)
     try {
-      await api.put("/settings", {
-        primary_color: settings.primary_color,
-        font_family: settings.font_family,
-        font_size_px: settings.font_size_px,
-        table_density: settings.table_density,
-        grid_columns: settings.grid_columns,
-        show_summary: settings.show_summary,
-        rounded_borders: settings.rounded_borders,
-        pastel_mode: settings.pastel_mode,
-        visible_fields: settings.visible_fields,
-        language: lang,
-      })
+      await settingsApi.save(serverPayload())
       applyLanguage(lang)
       setDirty(false)
       push({ kind: "success", title: t("settings.saved") })
@@ -60,11 +70,12 @@ export function Settings() {
     settings.reset()
     setLang("es")
     try {
-      await api.put("/settings", {
+      await settingsApi.save({
         primary_color: "", font_family: "Inter", font_size_px: 14,
         table_density: "normal", grid_columns: 3, show_summary: true,
         rounded_borders: true, pastel_mode: true,
         visible_fields: { names: true, assignee: true, date: true, notes: true },
+        table_header_bg: "",
         language: "es",
       })
       applyLanguage("es")

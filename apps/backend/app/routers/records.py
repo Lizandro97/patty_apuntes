@@ -1,13 +1,10 @@
-import io
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.export.filenames import export_filename
 from app.models.cell import Cell
 from app.models.company import Company
 from app.models.record import Record
@@ -28,9 +25,10 @@ from app.schemas.record import (
     RecordRowUpdate,
     RecordUpdate,
 )
+from app.services import records_service
+from app.services.export_service import MAX_EXPORT_YEARS, build_excel, build_pdf, strings
 from app.sync.engine import touch_record
 from app.validation.rules import (
-    find_rows_missing_company,
     sanitize_staff_names,
     validate_scale,
     validate_staff,
@@ -38,157 +36,6 @@ from app.validation.rules import (
 )
 
 router = APIRouter(prefix="/records", tags=["records"])
-
-
-def _recalc_progress(db: Session, record_id: str):
-    total = db.query(func.count(Cell.id)).filter(Cell.record_id == record_id).scalar() or 0
-    rev = (
-        db.query(func.count(Cell.id))
-        .filter(Cell.record_id == record_id, Cell.reviewed.is_(True))
-        .scalar()
-        or 0
-    )
-    prog = int(rev * 100 / total) if total else 0
-    record = db.get(Record, record_id)
-    if record:
-        record.progress = prog
-        db.commit()
-    return prog, total, rev
-
-
-def _ensure_rows(db: Session, record: Record) -> list[RecordRow]:
-    rows = (
-        db.query(RecordRow)
-        .filter(RecordRow.record_id == record.id)
-        .order_by(RecordRow.position)
-        .all()
-    )
-    if rows:
-        return rows
-    # default: 5 empty rows, no data — months work per row, empresa picked later
-    for idx in range(5):
-        db.add(
-            RecordRow(
-                record_id=record.id,
-                company_id=None,
-                name_snapshot="",
-                position=idx,
-            )
-        )
-    db.commit()
-    return (
-        db.query(RecordRow)
-        .filter(RecordRow.record_id == record.id)
-        .order_by(RecordRow.position)
-        .all()
-    )
-
-
-def _ensure_cells(db: Session, record: Record, rows: list[RecordRow]):
-    # create missing cells per row — months work with or without empresa
-    for row in rows:
-        cnt = (
-            db.query(func.count(Cell.id))
-            .filter(Cell.record_id == record.id, Cell.row_id == row.id)
-            .scalar()
-            or 0
-        )
-        if cnt > 0:
-            # ensure all years covered (for scale changes)
-            for y in range(record.period_start, record.period_end + 1):
-                for m in range(1, 13):
-                    if (
-                        not db.query(Cell)
-                        .filter(
-                            Cell.record_id == record.id,
-                            Cell.row_id == row.id,
-                            Cell.year == y,
-                            Cell.month == m,
-                        )
-                        .first()
-                    ):
-                        db.add(
-                            Cell(
-                                record_id=record.id,
-                                row_id=row.id,
-                                company_id=row.company_id,
-                                year=y,
-                                month=m,
-                            )
-                        )
-        else:
-            for y in range(record.period_start, record.period_end + 1):
-                for m in range(1, 13):
-                    db.add(
-                        Cell(
-                            record_id=record.id,
-                            row_id=row.id,
-                            company_id=row.company_id,
-                            year=y,
-                            month=m,
-                        )
-                    )
-    db.commit()
-
-
-def _sync_scale(db: Session, record: Record, old_start: int, old_end: int):
-    # delete out-of-range
-    db.query(Cell).filter(
-        Cell.record_id == record.id,
-        (Cell.year < record.period_start) | (Cell.year > record.period_end),
-    ).delete(synchronize_session=False)
-    # add missing years for each row
-    rows = db.query(RecordRow).filter(RecordRow.record_id == record.id).all()
-    for row in rows:
-        for y in range(record.period_start, record.period_end + 1):
-            if y < old_start or y > old_end:
-                for m in range(1, 13):
-                    if (
-                        not db.query(Cell)
-                        .filter(
-                            Cell.record_id == record.id,
-                            Cell.row_id == row.id,
-                            Cell.year == y,
-                            Cell.month == m,
-                        )
-                        .first()
-                    ):
-                        db.add(
-                            Cell(
-                                record_id=record.id,
-                                row_id=row.id,
-                                company_id=row.company_id,
-                                year=y,
-                                month=m,
-                            )
-                        )
-    db.commit()
-
-
-def _ensure_live(db: Session, record: Record) -> list[RecordRow]:
-    """Ensure por defecto + touch solo si realmente creo filas/celdas.
-
-    Los GET que materializan defaults (list_rows/cells/stats/export) tambien
-    generan datos sync-visibles: sin touch el pull los perderia.
-    """
-    rows_before = (
-        db.query(func.count(RecordRow.id)).filter(RecordRow.record_id == record.id).scalar() or 0
-    )
-    cells_before = db.query(func.count(Cell.id)).filter(Cell.record_id == record.id).scalar() or 0
-    rows = _ensure_rows(db, record)
-    _ensure_cells(db, record, rows)
-    rows_after = (
-        db.query(func.count(RecordRow.id)).filter(RecordRow.record_id == record.id).scalar() or 0
-    )
-    cells_after = db.query(func.count(Cell.id)).filter(Cell.record_id == record.id).scalar() or 0
-    if rows_after != rows_before or cells_after != cells_before:
-        touch_record(db, record)
-    return (
-        db.query(RecordRow)
-        .filter(RecordRow.record_id == record.id)
-        .order_by(RecordRow.position)
-        .all()
-    )
 
 
 # ---------- Archivos ----------
@@ -218,10 +65,10 @@ def create(
     db.add(a)
     db.commit()
     db.refresh(a)
-    rows = _ensure_rows(db, a)
+    rows = records_service.ensure_rows(db, a)
     if rows:
-        _ensure_cells(db, a, rows)
-        _recalc_progress(db, a.id)
+        records_service.ensure_cells(db, a, rows)
+        records_service.recalc_progress(db, a.id)
         db.refresh(a)
     touch_record(db, a)
     return a
@@ -281,7 +128,7 @@ def update(
     db.commit()
     db.refresh(a)
     if scale_changed:
-        _sync_scale(db, a, old_start, old_end)
+        records_service.sync_scale(db, a, old_start, old_end)
     touch_record(db, a)
     return a
 
@@ -290,14 +137,7 @@ LAYOUT_SECTIONS = ("sheet", "table")
 
 
 def _require_record(record_id: str, db: Session, user: User) -> Record:
-    a = (
-        db.query(Record)
-        .filter(Record.id == record_id, Record.user_id == user.id, Record.deleted_at.is_(None))
-        .first()
-    )
-    if not a:
-        raise HTTPException(404, {"code": "RECORD_NOT_FOUND", "message": "Not found"})
-    return a
+    return records_service.require_record(record_id, db, user)
 
 
 @router.get("/{record_id}/layout", response_model=list[LayoutOut])
@@ -368,77 +208,7 @@ def duplicate(
     )
     if not orig:
         raise HTTPException(404, {"code": "RECORD_NOT_FOUND", "message": "Not found"})
-    a = Record(
-        user_id=user.id,
-        title=orig.title + " (copia)",
-        review_type=orig.review_type,
-        period_start=orig.period_start,
-        period_end=orig.period_end,
-    )
-    db.add(a)
-    db.commit()
-    db.refresh(a)
-    rows = (
-        db.query(RecordRow)
-        .filter(RecordRow.record_id == orig.id)
-        .order_by(RecordRow.position)
-        .all()
-    )
-    for f in rows:
-        new_row = RecordRow(
-            record_id=a.id,
-            company_id=f.company_id,
-            name_snapshot=f.name_snapshot,
-            position=f.position,
-            assignee=f.assignee,
-            note=f.note,
-        )
-        db.add(new_row)
-    db.commit()
-    # copy each row with its own month cells (fresh revision: unchecked)
-    new_rows = (
-        db.query(RecordRow).filter(RecordRow.record_id == a.id).order_by(RecordRow.position).all()
-    )
-    old_cells = db.query(Cell).filter(Cell.record_id == orig.id).all()
-    old_by_row: dict = {}
-    for c in old_cells:
-        old_by_row.setdefault(c.row_id, []).append(c)
-    old_by_position = {f.position: f.id for f in rows}
-    for new_row in new_rows:
-        for c in old_by_row.get(old_by_position.get(new_row.position), []):
-            db.add(
-                Cell(
-                    record_id=a.id,
-                    row_id=new_row.id,
-                    company_id=new_row.company_id,
-                    year=c.year,
-                    month=c.month,
-                    reviewed=False,
-                    assignee=c.assignee,
-                    color=c.color,
-                    style=c.style,
-                )
-            )
-    db.commit()
-    _recalc_progress(db, a.id)
-    # Copy the visual design (sheet + table; per-row heights are reassigned by
-    # position, non-row keys —e.g. "header"— are preserved verbatim)
-    for d in db.query(RecordLayout).filter(RecordLayout.record_id == orig.id).all():
-        payload = d.payload if isinstance(d.payload, dict) else {}
-        if d.section == "table" and isinstance(payload.get("rows"), dict):
-            new_by_position = {f.position: f.id for f in new_rows}
-            old_ids = {f.id for f in rows}
-            remapped = {k: v for k, v in payload["rows"].items() if k not in old_ids}
-            for f in rows:
-                v = payload["rows"].get(f.id)
-                if v is not None and f.position in new_by_position:
-                    remapped[new_by_position[f.position]] = v
-            payload = {**payload, "rows": remapped}
-        db.add(RecordLayout(record_id=a.id, section=d.section, payload=payload))
-    db.commit()
-    db.refresh(a)
-    touch_record(db, a)
-    return a
+    return records_service.duplicate_record(db, orig, user.id)
 
 
 # ---------- Filas ----------
@@ -453,7 +223,7 @@ def list_rows(
     )
     if not record:
         raise HTTPException(404, {"code": "RECORD_NOT_FOUND", "message": "Not found"})
-    return _ensure_live(db, record)
+    return records_service.ensure_live(db, record)
 
 
 @router.post("/{record_id}/rows", response_model=RecordRowOut)
@@ -642,18 +412,12 @@ def reorder_rows(
 def list_cells(
     record_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)
 ):
-    record = (
-        db.query(Record)
-        .filter(Record.id == record_id, Record.user_id == user.id, Record.deleted_at.is_(None))
-        .first()
-    )
-    if not record:
-        raise HTTPException(404, {"code": "RECORD_NOT_FOUND", "message": "Not found"})
-    _ensure_live(db, record)
+    record = records_service.require_record(record_id, db, user)
+    records_service.ensure_live(db, record)
     return db.query(Cell).filter(Cell.record_id == record_id).all()
 
 
-@router.put("/../cells/{cell_id}", response_model=CellOut)
+@router.put("/cells/{cell_id}", response_model=CellOut)
 def update_cell(
     cell_id: str,
     data: CellUpdate,
@@ -680,13 +444,13 @@ def update_cell(
         c.style = data.style
     db.commit()
     db.refresh(c)
-    _recalc_progress(db, record.id)
+    records_service.recalc_progress(db, record.id)
     touch_record(db, record)
     return c
 
 
-# alias for /cells/{id}
-@router.put("/cells/{cell_id}", response_model=CellOut, include_in_schema=False)
+# alias legacy: el frontend antiguo normalizaba /records/../cells/{id}
+@router.put("/../cells/{cell_id}", response_model=CellOut, include_in_schema=False)
 def update_cell_alias(
     cell_id: str,
     data: CellUpdate,
@@ -728,20 +492,14 @@ def bulk_update(
     db.commit()
     for c in out:
         db.refresh(c)
-    _recalc_progress(db, record_id)
+    records_service.recalc_progress(db, record_id)
     touch_record(db, record)
     return out
 
 
 @router.get("/{record_id}/stats")
 def stats(record_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    record = (
-        db.query(Record)
-        .filter(Record.id == record_id, Record.user_id == user.id, Record.deleted_at.is_(None))
-        .first()
-    )
-    if not record:
-        raise HTTPException(404, {"code": "RECORD_NOT_FOUND", "message": "Not found"})
+    record = records_service.require_record(record_id, db, user)
     total = db.query(func.count(Cell.id)).filter(Cell.record_id == record_id).scalar() or 0
     rev = (
         db.query(func.count(Cell.id))
@@ -749,31 +507,10 @@ def stats(record_id: str, db: Session = Depends(get_db), user: User = Depends(ge
         .scalar()
         or 0
     )
-    rows = _ensure_live(db, record)
+    records_service.ensure_live(db, record)
     # count fully-reviewed rows (every row counts, with or without company)
-    reviewed_count = 0
-    for row in rows:
-        t = (
-            db.query(func.count(Cell.id))
-            .filter(Cell.record_id == record_id, Cell.row_id == row.id)
-            .scalar()
-            or 0
-        )
-        r = (
-            db.query(func.count(Cell.id))
-            .filter(
-                Cell.record_id == record_id,
-                Cell.row_id == row.id,
-                Cell.reviewed.is_(True),
-            )
-            .scalar()
-            or 0
-        )
-        if t > 0 and t == r:
-            reviewed_count += 1
-    total_rows = len(rows)
-    pending_count = total_rows - reviewed_count if total_rows else 0
-    prog = int(rev * 100 / total) if total else 0
+    total_rows, reviewed_count, pending_count = records_service.row_stats(db, record_id)
+    prog = records_service.calc_progress(rev, total)
     return {
         "total": total_rows,
         "reviewed": reviewed_count,
@@ -784,17 +521,6 @@ def stats(record_id: str, db: Session = Depends(get_db), user: User = Depends(ge
     }
 
 
-def _missing_fields(rows: list[RecordRow]) -> list[dict]:
-    """Required fields for save/export: every row needs a registered company."""
-    ordered = sorted(rows, key=lambda f: f.position)
-    return find_rows_missing_company(
-        [
-            {"id": r.id, "company_id": r.company_id, "name_snapshot": r.name_snapshot}
-            for r in ordered
-        ]
-    )
-
-
 @router.get("/{record_id}/export")
 def export_file(
     record_id: str,
@@ -803,40 +529,15 @@ def export_file(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    TXT = {
-        "en": {
-            "months": ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"],
-            "number": "No.",
-            "company": "Company",
-            "assignee": "Assignee",
-            "notes": "Notes",
-            "sheet": "Review",
-            "untitled": "Untitled review",
-            "companies": "Companies",
-            "file": "review",
-        },
-        "es": {
-            "months": ["E", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"],
-            "number": "N.º",
-            "company": "Empresa",
-            "assignee": "Responsable",
-            "notes": "Observaciones",
-            "sheet": "Revisión",
-            "untitled": "Revisión sin título",
-            "companies": "Empresas",
-            "file": "revision",
-        },
-    }["en" if lang == "en" else "es"]
-    record = (
-        db.query(Record)
-        .filter(Record.id == record_id, Record.user_id == user.id, Record.deleted_at.is_(None))
-        .first()
-    )
-    if not record:
-        raise HTTPException(404, {"code": "RECORD_NOT_FOUND", "message": "Not found"})
-    rows = _ensure_live(db, record)
+    txt = strings(lang)
+    if format not in ("pdf", "excel"):
+        raise HTTPException(400, {"code": "FORMAT_INVALID", "message": "format debe ser pdf|excel"})
+    record = records_service.require_record(record_id, db, user)
+    if record.period_end - record.period_start + 1 > MAX_EXPORT_YEARS:
+        raise HTTPException(400, {"code": "SCALE_TOO_LARGE", "message": "Escala muy grande"})
+    rows = records_service.ensure_live(db, record)
     rows = sorted(rows, key=lambda f: f.position)
-    missing = _missing_fields(rows)
+    missing = records_service.missing_fields(rows)
     if missing:
         raise HTTPException(
             status_code=422,
@@ -847,191 +548,7 @@ def export_file(
             },
         )
     cells = db.query(Cell).filter(Cell.record_id == record_id).all()
-    cmap = {(c.row_id, c.year, c.month): c for c in cells}
 
     if format == "excel":
-        from openpyxl import Workbook
-        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-
-        wb = Workbook()
-        ws = wb.active
-        ws.title = TXT["sheet"]
-        header_fill = PatternFill(start_color="6366F1", end_color="6366F1", fill_type="solid")
-        header_font = Font(color="FFFFFF", bold=True, size=9)
-        thin = Side(style="thin", color="E2E8F0")
-        border = Border(left=thin, right=thin, top=thin, bottom=thin)
-        years = list(range(record.period_start, record.period_end + 1))
-        months = TXT["months"]
-        ws.merge_cells(start_row=1, start_column=1, end_row=2, end_column=1)
-        ws.merge_cells(start_row=1, start_column=2, end_row=2, end_column=2)
-        ws.cell(row=1, column=1, value=TXT["number"]).font = header_font
-        ws.cell(row=1, column=1).fill = header_fill
-        ws.cell(row=1, column=1).alignment = Alignment(horizontal="center", vertical="center")
-        ws.cell(row=1, column=2, value=TXT["company"]).font = header_font
-        ws.cell(row=1, column=2).fill = header_fill
-        ws.cell(row=1, column=2).alignment = Alignment(horizontal="center", vertical="center")
-        col = 3
-        for y in years:
-            ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 11)
-            c = ws.cell(row=1, column=col, value=str(y))
-            c.font = header_font
-            c.fill = header_fill
-            c.alignment = Alignment(horizontal="center")
-            col += 12
-        col = 3
-        for _ in years:
-            for m in months:
-                c = ws.cell(row=2, column=col, value=m)
-                c.font = header_font
-                c.fill = header_fill
-                c.alignment = Alignment(horizontal="center")
-                col += 1
-        for hdr in (TXT["assignee"], TXT["notes"]):
-            ws.merge_cells(start_row=1, start_column=col, end_row=2, end_column=col)
-            c = ws.cell(row=1, column=col, value=hdr)
-            c.font = header_font
-            c.fill = header_fill
-            c.alignment = Alignment(horizontal="center", vertical="center")
-            col += 1
-        r = 3
-        for idx, row in enumerate(rows, 1):
-            ws.cell(row=r, column=1, value=idx).alignment = Alignment(horizontal="center")
-            ws.cell(row=r, column=2, value=row.name_snapshot)
-            col = 3
-            for y in years:
-                for m_idx in range(1, 13):
-                    c = cmap.get((row.id, y, m_idx))
-                    v = "☑" if c and c.reviewed else "☐"
-                    cell = ws.cell(row=r, column=col, value=v)
-                    cell.alignment = Alignment(horizontal="center")
-                    if c and c.reviewed:
-                        colr = (c.color or "6366F1").lstrip("#")
-                        cell.font = Font(color=colr)
-                        # style bold
-                        if c.style and c.style.get("bold"):
-                            cell.font = Font(color=colr, bold=True)
-                    col += 1
-            ws.cell(row=r, column=col, value=row.assignee or "")
-            ws.cell(row=r, column=col + 1, value=row.note or "")
-            col += 2
-            r += 1
-        for row in ws.iter_rows(min_row=1, max_row=r - 1, max_col=col - 1):
-            for cell in row:
-                cell.border = border
-        ws.freeze_panes = "C3"
-        ws.sheet_properties.pageSetUpPr.fitToPage = True
-        bio = io.BytesIO()
-        wb.save(bio)
-        bio.seek(0)
-        return StreamingResponse(
-            bio,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={
-                "Content-Disposition": (
-                    f"attachment; filename={export_filename(record.title, 'xlsx')}"
-                )
-            },
-        )
-    else:
-        from reportlab.lib import colors
-        from reportlab.lib.pagesizes import A4, landscape
-        from reportlab.lib.styles import getSampleStyleSheet
-        from reportlab.lib.units import mm
-        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-
-        bio = io.BytesIO()
-        doc = SimpleDocTemplate(
-            bio,
-            pagesize=landscape(A4),
-            leftMargin=10 * mm,
-            rightMargin=10 * mm,
-            topMargin=10 * mm,
-            bottomMargin=10 * mm,
-        )
-        styles = getSampleStyleSheet()
-        story = []
-        doc_title = (
-            f"{record.title or TXT['untitled']} — "
-            f"{record.period_start}-{record.period_end} | "
-            f"{len(rows)} {TXT['companies']}"
-        )
-        story.append(
-            Paragraph(
-                doc_title,
-                styles["Title"],
-            )
-        )
-        story.append(Spacer(1, 6))
-        years = list(range(record.period_start, record.period_end + 1))
-        months = TXT["months"]
-        flat_header = [TXT["number"], TXT["company"]]
-        for y in years:
-            for m in months:
-                flat_header.append(f"{y}-{m}")
-        flat_header += [TXT["assignee"], TXT["notes"]]
-        table_data = [flat_header]
-        for idx, row in enumerate(rows, 1):
-            entry = [str(idx), row.name_snapshot]
-            for y in years:
-                for m_idx in range(1, 13):
-                    c = cmap.get((row.id, y, m_idx))
-                    entry.append("☑" if c and c.reviewed else "☐")
-            entry += [row.assignee or "", row.note or ""]
-            table_data.append(entry)
-        n_meses = len(flat_header) - 4
-        col_widths = [12 * mm, 30 * mm] + [8 * mm] * n_meses + [20 * mm, 28 * mm]
-        t = Table(table_data, colWidths=col_widths, repeatRows=1)
-        style = TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#6366f1")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("FONTSIZE", (0, 0), (-1, 0), 6),
-                ("FONTSIZE", (0, 1), (-1, -1), 5),
-                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
-            ]
-        )
-        t.setStyle(style)
-        story.append(t)
-        # Fase 5 §12: adjuntos de imagen como miniaturas al final del PDF.
-        from pathlib import Path as _Path
-
-        from reportlab.platypus import Image as _RLImage
-
-        from app.core.config import settings as _settings
-        from app.models.attachment import Attachment as _Attachment
-
-        for att in db.query(_Attachment).filter(_Attachment.record_id == record.id).all():
-            if not att.mime.startswith("image/"):
-                continue
-            for ext in (".jpg", ".png", ".webp"):
-                p = _Path(_settings.ATTACH_DIR) / record.id / f"{att.hash}{ext}"
-                if not p.exists():
-                    continue
-                try:
-                    from PIL import Image as _PILImage
-
-                    with _PILImage.open(p) as im:
-                        im.verify()
-                    with _PILImage.open(p) as im:
-                        w, h = im.size
-                    side = 30 * mm
-                    scale = side / max(w, h)
-                    story.append(Spacer(1, 6))
-                    story.append(_RLImage(str(p), width=w * scale, height=h * scale))
-                except Exception:
-                    pass
-                break
-        doc.build(story)
-        bio.seek(0)
-        return StreamingResponse(
-            bio,
-            media_type="application/pdf",
-            headers={
-                "Content-Disposition": (
-                    f"attachment; filename={export_filename(record.title, 'pdf')}"
-                )
-            },
-        )
+        return build_excel(record, rows, cells, txt)
+    return build_pdf(db, record, rows, cells, txt)

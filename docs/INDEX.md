@@ -13,6 +13,7 @@ Nueva documentación usa siempre `apps/*`.
 - `fase3.md` — Cierre Fase 3 (mobile offline paridad + export on-device).
 - `fase4.md` — Cierre Fase 4 (servidor LAN + seguridad + web coherente).
 - `fase5.md` — Cierre Fase 5 (resolve merge/mine/theirs, adjuntos, golden).
+- `refactor.md` — Refactor arquitectónico dashboard (Fases 0–C: seguridad, services backend, FSD-lite frontend, contratos TS/Python, CI).
 - `PLAN.md` (raíz) — Plan maestro Web + Android + Local-First, fases 0–5.
 - `ARCHITECTURE.md` (raíz) — Arquitectura objetivo original.
 - Decisión móvil (2026-09): app React Native **eliminada** (`archive/mobile-rn/`, `app.json`, `scripts/android-dev.sh`, `packages/sync` y deps `expo/react-native` raíz). Producto = **solo web full responsive** (misma UI, táctil ≥44px, sin hover-only). Capa sync del backend intacta (la usa Inicio vía `GET /sync/status`); sus fixtures golden se mudaron de `packages/sync/` a `apps/backend/tests/fixtures/`. Docs fase0–5 y `REPORT.md`/`ARCHITECTURE.md` se conservan como historia.

@@ -1,16 +1,29 @@
-from fastapi import FastAPI
+import logging
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
 from app.db.init import init_db
 from app.routers import attachments, auth, companies, records, sync
 from app.routers import settings as settings_router
 
-# Arranque no destructivo (Fase 0): crea tablas faltantes, conserva filas.
-# Migraciones de esquema: Alembic desde Fase 2.
-init_db()
+logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Patty Apuntes API", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Arranque no destructivo (Fase 0): crea tablas faltantes, conserva filas.
+    # Migraciones de esquema: Alembic desde Fase 2 (+ ALTER ligeros en init_db).
+    init_db()
+    yield
+
+
+app = FastAPI(title="Patty Apuntes API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,11 +41,21 @@ app.include_router(settings_router.router, prefix="/api")
 app.include_router(sync.router, prefix="/api")
 
 
-@app.get("/health")
-def health():
-    return {"ok": True}
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={"code": "VALIDATION_ERROR", "message": "Datos invalidos", "errors": exc.errors()},
+    )
 
 
+@app.exception_handler(SQLAlchemyError)
+async def db_exception_handler(request: Request, exc: SQLAlchemyError):
+    logger.exception("Database error on %s", request.url.path)
+    return JSONResponse(status_code=500, content={"code": "DB_ERROR", "message": "Error interno"})
+
+
+@app.get("/health", include_in_schema=False)
 @app.get("/api/health")
-def api_health():
+def health():
     return {"ok": True}

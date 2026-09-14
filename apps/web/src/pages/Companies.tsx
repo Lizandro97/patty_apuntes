@@ -1,20 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
-import { api } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useEffect, useState } from "react"
 import { Pencil, Plus, Search, Trash2, X } from "lucide-react"
 import { useToast } from "@/lib/toast"
+import { queryKeys } from "@/shared/queryKeys"
+import { companiesApi } from "@/shared/api/companies"
+import { fmtDate } from "@/shared/format"
+
+type Company = { id: string; name: string; created_at: string }
 
 export function Companies() {
   const { t, i18n } = useTranslation()
   const qc = useQueryClient()
-  const { data, isPending, isError, refetch } = useQuery({ queryKey:["companies"], queryFn: async()=> (await api.get("/companies")).data })
+  const { data, isPending, isError, refetch } = useQuery({ queryKey: queryKeys.companies, queryFn: companiesApi.list })
   const [q,setQ]=useState("")
-  const [editRec,setEditRec]=useState<any|null>(null)
+  const [editRec,setEditRec]=useState<Company|null>(null)
   const [editName,setEditName]=useState("")
-  const [delRec,setDelRec]=useState<any|null>(null)
+  const [delRec,setDelRec]=useState<Company|null>(null)
   const { push } = useToast()
   useEffect(() => {
     if (!editRec && !delRec) return
@@ -22,15 +26,15 @@ export function Companies() {
     document.addEventListener("keydown", k)
     return () => document.removeEventListener("keydown", k)
   }, [editRec, delRec])
-  const all = ((data as any[]) ?? [])
+  const all: Company[] = data ?? []
   // Buscar solo tiene sentido con 2+ registros; con 0-1 el campo es solo-agregar
   const searchActive = all.length >= 2
-  const shown = searchActive ? all.filter((e:any)=> (e.name ?? "").toLowerCase().includes(q.toLowerCase())) : all
+  const shown = searchActive ? all.filter((e)=> (e.name ?? "").toLowerCase().includes(q.toLowerCase())) : all
   const trimmed = q.trim()
-  const exists = !!trimmed && all.some((e:any)=> (e.name ?? "").toLowerCase() === trimmed.toLowerCase())
-  const create = useMutation({ mutationFn: async(name:string)=> (await api.post("/companies",{name})).data, onSuccess:()=> { qc.invalidateQueries({queryKey:["companies"]}); setQ("")} })
-  const update = useMutation({ mutationFn: async({id,name}:{id:string;name:string})=> (await api.put(`/companies/${id}`,{name})).data, onSuccess:()=> { qc.invalidateQueries({queryKey:["companies"]}); setEditRec(null) }, onError:()=> { push({ kind: "error", title: t("common.saveError"), actionLabel: t("common.retry"), onAction: ()=>editName.trim() && editRec && update.mutate({id: editRec.id, name: editName.trim()}) }) } })
-  const del = useMutation({ mutationFn: async(id:string)=> await api.delete(`/companies/${id}`), onSuccess:()=> qc.invalidateQueries({queryKey:["companies"]}) })
+  const exists = !!trimmed && all.some((e)=> (e.name ?? "").toLowerCase() === trimmed.toLowerCase())
+  const create = useMutation({ mutationFn: companiesApi.create, onSuccess:()=> { qc.invalidateQueries({queryKey: queryKeys.companies}); setQ("")} })
+  const update = useMutation({ mutationFn: ({id,name}:{id:string;name:string})=> companiesApi.update(id, name), onSuccess:()=> { qc.invalidateQueries({queryKey: queryKeys.companies}); setEditRec(null) }, onError:()=> { push({ kind: "error", title: t("common.saveError"), actionLabel: t("common.retry"), onAction: ()=>editName.trim() && editRec && update.mutate({id: editRec.id, name: editName.trim()}) }) } })
+  const del = useMutation({ mutationFn: companiesApi.remove, onSuccess:()=> qc.invalidateQueries({queryKey: queryKeys.companies}) })
   return (
     <>
     <div className="flex-1 bg-[var(--bg)] p-6 overflow-auto">
@@ -64,11 +68,11 @@ export function Companies() {
                 ))
               ) : isError ? (
                 <tr><td colSpan={4} className="p-6 text-center text-sm text-[var(--text-dim)]">{t("common.loadError")} <button onClick={() => refetch()} className="text-[var(--accent)] font-medium hover:underline ml-1">{t("common.retry")}</button></td></tr>
-              ) : shown?.map((e:any, i:number)=> (
+              ) : shown?.map((e, i:number)=> (
                 <tr key={e.id} className="hover:bg-[var(--surface-2)]">
                   <td className="p-3 text-[var(--text-dim)] font-mono text-xs">{i+1}</td>
                   <td className="p-3 text-[var(--text)]">{e.name}</td>
-                  <td className="p-3 text-xs text-[var(--text-dim)]">{new Date(e.created_at).toLocaleDateString(i18n.language === "en" ? "en-US" : "es-PE")}</td>
+                  <td className="p-3 text-xs text-[var(--text-dim)]">{fmtDate(e.created_at, i18n.language)}</td>
                   <td className="p-3 text-center whitespace-nowrap">
                     <span className="inline-flex gap-1.5 justify-center items-center">
                       <Button variant="outline" onClick={()=>{ setEditRec(e); setEditName(e.name) }} title={t("companies.edit")} aria-label={t("companies.editNameAria")} aria-haspopup="dialog" className="min-w-[44px] min-h-[44px] p-0 shrink-0 bg-[var(--bg)] border-[var(--border)] text-[var(--text-dim)] hover:text-[var(--text)]"><Pencil size={16}/></Button>

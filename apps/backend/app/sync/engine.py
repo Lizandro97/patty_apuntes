@@ -267,7 +267,15 @@ def merge_docs(server_doc: dict, incoming_doc: dict) -> dict:
         newer = incoming_doc if i_dt >= s_dt else server_doc
     except SyncInvalid:
         newer = server_doc
-    for k in ("title", "metadata", "period_start", "period_end", "staff_count", "staff_names", "layout"):
+    for k in (
+        "title",
+        "metadata",
+        "period_start",
+        "period_end",
+        "staff_count",
+        "staff_names",
+        "layout",
+    ):
         if k in newer:
             out[k] = newer[k]
     out["updated_at"] = datetime.now(UTC).isoformat()

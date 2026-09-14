@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "foliora",
+      "name": "foliora"
     },
     "apps/web": {
       "name": "frontend",
@@ -26,7 +26,7 @@
         "react-router-dom": "^7.18.3",
         "tailwind-merge": "^3.6.0",
         "zod": "^4.6.1",
-        "zustand": "^5.0.15",
+        "zustand": "^5.0.15"
       },
       "devDependencies": {
         "@types/node": "^22.20.2",
@@ -38,21 +38,21 @@
         "postcss": "^8.5.28",
         "tailwindcss": "3.4.1",
         "typescript": "~6.0.2",
-        "vite": "^8.2.2",
-      },
+        "vite": "^8.2.2"
+      }
     },
     "packages/document-logic": {
       "name": "@foliora/document-logic",
-      "version": "0.1.0",
+      "version": "0.1.0"
     },
     "packages/document-model": {
       "name": "@foliora/document-model",
-      "version": "0.1.0",
+      "version": "0.1.0"
     },
     "packages/validation": {
       "name": "@foliora/validation",
-      "version": "0.1.0",
-    },
+      "version": "0.1.0"
+    }
   },
   "packages": {
     "@alloc/quick-lru": ["@alloc/quick-lru@5.3.0", "", {}, "sha512-U4+70Pc5ZS9osnCBCE5Jha/ciHM+Yp+CNMNC/7HvYbNRk1Ldd+f7qO65W5qfhu/TCv+/ozljlXXe9Nj8419DMA=="],
@@ -469,6 +469,6 @@
 
     "readdirp/picomatch": ["picomatch@2.3.2", "", {}, "sha512-V7+vQEJ06Z+c5tSye8S+nHUfI51xoXIXjHQ99cQtKUkQqqO1kO/KCJUfZXuB47h/YBlDhah2H3hdUGXn8ie0oA=="],
 
-    "terser/commander": ["commander@2.20.3", "", {}, "sha512-GpVkmM8vF2vQUkj2LvZmD35JxeJOLCwJ9cUkugyk2nuhbv3+mJvpLYYt+0+USMxE+oj+ey/lJEnhZw75x/OMcQ=="],
+    "terser/commander": ["commander@2.20.3", "", {}, "sha512-GpVkmM8vF2vQUkj2LvZmD35JxeJOLCwJ9cUkugyk2nuhbv3+mJvpLYYt+0+USMxE+oj+ey/lJEnhZw75x/OMcQ=="]
   }
 }

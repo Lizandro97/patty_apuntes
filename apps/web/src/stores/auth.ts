@@ -3,7 +3,7 @@ import { create } from "zustand"
 type AuthState = {
   token: string | null
   user: { id: string; email: string; full_name: string } | null
-  setAuth: (token: string, user: any) => void
+  setAuth: (token: string, user: any, refreshToken?: string) => void
   logout: () => void
   init: () => void
 }
@@ -26,9 +26,10 @@ const initial = getInitial()
 export const useAuthStore = create<AuthState>((set) => ({
   token: initial.token,
   user: initial.user,
-  setAuth: (token, user) => {
+  setAuth: (token, user, refreshToken) => {
     localStorage.setItem("token", token)
     localStorage.setItem("user", JSON.stringify(user))
+    if (refreshToken) localStorage.setItem("refresh_token", refreshToken)
     set({ token, user })
   },
   logout: () => {

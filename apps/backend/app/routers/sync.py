@@ -21,14 +21,12 @@ from app.schemas.sync import (
     ResolveOut,
     StatusOut,
 )
+from app.services.sync_service import resolve_conflict
 from app.sync.engine import (
     SyncInvalid,
     apply_doc,
     current_revision,
-    merge_docs,
-    parse_dt,
     record_to_doc,
-    touch_record,
 )
 
 router = APIRouter(prefix="/sync", tags=["sync"])
@@ -104,6 +102,11 @@ def create_pairing(db: Session = Depends(get_db), user: User = Depends(get_curre
 
 @router.post("/devices/claim", response_model=ClaimOut)
 def claim_device(data: ClaimIn, db: Session = Depends(get_db)):
+    """Pareo publico por diseño (el dispositivo nuevo aun no tiene JWT).
+
+    El pairing_token de un solo uso autentica la operacion y el dispositivo
+    queda vinculado al user_id dueño del token (multitenant).
+    """
     pt = db.get(PairingToken, data.pairing_token)
     now = datetime.now(UTC)
     exp = (
@@ -114,7 +117,7 @@ def claim_device(data: ClaimIn, db: Session = Depends(get_db)):
     if not pt or pt.used or exp < now:
         raise HTTPException(400, {"code": "PAIRING_INVALID", "message": "Invalid pairing token"})
     pt.used = True
-    dev = Device(name=data.name[:80])
+    dev = Device(name=data.name[:80], user_id=pt.user_id)
     db.add(dev)
     db.commit()
     db.refresh(dev)
@@ -123,16 +126,16 @@ def claim_device(data: ClaimIn, db: Session = Depends(get_db)):
 
 @router.get("/devices", response_model=list[DeviceOut])
 def list_devices(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    _ = user
-    return db.query(Device).order_by(Device.paired_at.desc()).all()
+    return (
+        db.query(Device).filter(Device.user_id == user.id).order_by(Device.paired_at.desc()).all()
+    )
 
 
 @router.post("/devices/{device_id}/revoke")
 def revoke_device(
     device_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)
 ):
-    _ = user
-    dev = db.get(Device, device_id)
+    dev = db.query(Device).filter(Device.id == device_id, Device.user_id == user.id).first()
     if not dev:
         raise HTTPException(404, {"code": "DEVICE_NOT_FOUND", "message": "Not found"})
     dev.revoked = True
@@ -142,36 +145,6 @@ def revoke_device(
 
 @router.post("/resolve", response_model=ResolveOut)
 def resolve(data: ResolveIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    """Resolucion explicita de un conflicto (Fase 5).
-
-    merge: union filas + OR celdas + metadata del mas nuevo.
-    mine: el doc del cliente gana (se reestampa a ahora).
-    theirs: se conserva el servidor, sin cambios.
-    """
-    from app.sync.engine import _replace_parts
-
-    if data.strategy not in ("merge", "mine", "theirs"):
-        raise HTTPException(400, {"code": "STRATEGY_INVALID", "message": "Bad strategy"})
-    stored = (
-        db.query(Record)
-        .filter(Record.client_uuid == data.client_uuid, Record.user_id == user.id)
-        .first()
-    )
-    if not stored:
-        raise HTTPException(404, {"code": "RECORD_NOT_FOUND", "message": "Not found"})
-    if data.strategy == "theirs":
-        return ResolveOut(doc=record_to_doc(db, stored))
-    if not isinstance(data.doc, dict):
-        raise HTTPException(400, {"code": "RESOLVE_NEEDS_DOC", "message": "doc requerido"})
-    if data.strategy == "mine":
-        forced = dict(data.doc)
-        forced["updated_at"] = datetime.now(UTC).isoformat()
-        _replace_parts(db, stored, forced)
-        stored.deleted_at = None
-        touch_record(db, stored, forced.get("device_id"), parse_dt(forced["updated_at"]))
-        return ResolveOut(doc=record_to_doc(db, stored))
-    merged = merge_docs(record_to_doc(db, stored), data.doc)
-    _replace_parts(db, stored, merged)
-    stored.deleted_at = None
-    touch_record(db, stored, merged.get("device_id"), parse_dt(merged["updated_at"]))
-    return ResolveOut(doc=record_to_doc(db, stored))
+    """Resolucion explicita de un conflicto (merge | mine | theirs)."""
+    doc = resolve_conflict(db, user.id, data.client_uuid, data.strategy, data.doc)
+    return ResolveOut(doc=doc)
