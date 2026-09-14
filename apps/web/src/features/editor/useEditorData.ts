@@ -39,7 +39,7 @@ export function useEditorData(
         record: qc.getQueryData(queryKeys.record(recordId)),
       }
     }
-  }, [isDraft, record, rows, cells])
+  }, [isDraft, record, rows, cells, qc, recordId, savedRef])
 
   return {
     record, rows, cells, statsData, stats, companies, design,

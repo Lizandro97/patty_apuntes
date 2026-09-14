@@ -44,6 +44,8 @@ export default function App() {
         if (lng === "es" || lng === "en") applyLanguage(lng)
       }).catch(()=>{})
     }
+    // Mount-once bootstrap: init/apply are stable zustand actions.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   },[])
 
   return (

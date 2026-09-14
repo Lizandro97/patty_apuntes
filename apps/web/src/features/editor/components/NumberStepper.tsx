@@ -3,9 +3,9 @@ import { ChevronDown, ChevronUp } from "lucide-react"
 import { Input } from "@/components/ui/input"
 
 // Numeric stepper with theme arrows (no native spinners).
-export function NumberStepper({ value, onChange, min, max, ariaLabel, className, dense }: {
+export function NumberStepper({ value, onChange, min, max, ariaLabel, className, dense, id }: {
   value: number; onChange: (v: number) => void; min?: number; max?: number;
-  ariaLabel?: string; className?: string; dense?: boolean
+  ariaLabel?: string; className?: string; dense?: boolean; id?: string
 }) {
   const { t } = useTranslation()
   const clamp = (v: number) => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, v))
@@ -14,6 +14,7 @@ export function NumberStepper({ value, onChange, min, max, ariaLabel, className,
     <span className={`inline-flex items-stretch rounded-lg border border-[var(--border)] bg-[var(--bg)] overflow-hidden ${className ?? ""}`}>
       <Input
         type="number"
+        id={id}
         aria-label={ariaLabel}
         value={value}
         min={min}

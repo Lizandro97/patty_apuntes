@@ -28,6 +28,10 @@ function clone<T>(v: T): T {
   try {
     return structuredClone(v)
   } catch {
+    // Waiver (react-doctor/no-json-parse-stringify-clone): structuredClone is the
+    // primary path; JSON round-trip is only the fallback for uncloneable values
+    // (functions/symbols) in devtools-style snapshots. No prototype revival needed.
+    // react-doctor-disable-next-line react-doctor/no-json-parse-stringify-clone
     return JSON.parse(JSON.stringify(v ?? null))
   }
 }

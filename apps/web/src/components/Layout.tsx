@@ -133,6 +133,89 @@ function ProfileFooter({ collapsed }: { collapsed: boolean }) {
   )
 }
 
+function resolveNavKey(pathname: string): string {
+  if (pathname === "/") return "home"
+  if (pathname.startsWith("/editor")) return "editor"
+  if (pathname.startsWith("/companies")) return "companies"
+  if (pathname.startsWith("/records")) return "records"
+  return "settings"
+}
+
+function SidebarOverlay({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-30 bg-black/60 lg:hidden" onClick={onClose} aria-hidden />
+  )
+}
+
+function BrandHeader({ collapsed, onExpand, onCollapse }: {
+  collapsed: boolean; onExpand: () => void; onCollapse: () => void
+}) {
+  const { t } = useTranslation()
+  const expandOnLogo = () => {
+    if (collapsed && window.matchMedia("(min-width: 1024px)").matches) onExpand()
+  }
+  return (
+    <div className={cn("flex items-center gap-2.5 px-4 h-[60px] shrink-0", collapsed && "lg:justify-center lg:px-0")}>
+      <button
+        onClick={expandOnLogo}
+        title={collapsed ? t("nav.expandMenu") : undefined}
+        aria-label={collapsed ? t("nav.expandMenu") : t("nav.brand")}
+        className={cn("group/logo flex items-center gap-2.5 rounded-xl transition", collapsed && "lg:cursor-pointer")}
+      >
+        <span className="w-8 h-8 shrink-0 rounded-lg bg-gradient-to-br from-[var(--accent)] to-[var(--accent-ink)] flex items-center justify-center text-[var(--on-accent)] relative overflow-hidden">
+          <Leaf size={16} strokeWidth={2} className={cn("absolute inset-0 m-auto transition-opacity duration-150", collapsed && "lg:group-hover/logo:opacity-0")} />
+          {collapsed && <PanelLeftOpen size={16} className="absolute inset-0 m-auto opacity-0 lg:group-hover/logo:opacity-100 transition-opacity duration-150" />}
+        </span>
+        <span className={cn("font-semibold text-[var(--text)] text-[15px] tracking-tight truncate", collapsed && "lg:hidden")}>{t("nav.brand")}</span>
+      </button>
+      {!collapsed && (
+        <button
+          onClick={onCollapse}
+          title={t("nav.collapseMenu")}
+          aria-label={t("nav.collapseMenu")}
+          className="ml-auto w-10 h-10 hidden lg:flex items-center justify-center rounded-lg text-[var(--text-dim)] hover:bg-[var(--surface)] hover:text-[var(--text)] transition"
+        >
+          <PanelLeftClose size={15} />
+        </button>
+      )}
+    </div>
+  )
+}
+
+function NavItem({ to, itemKey, labelKey, Icon, end, active, collapsed, onNavigate }: {
+  to: string; itemKey: string; labelKey: string; Icon: typeof Home; end: boolean
+  active: boolean; collapsed: boolean; onNavigate: () => void
+}) {
+  const { t } = useTranslation()
+  const base = "flex items-center gap-3 rounded-xl text-[13px] leading-none transition-colors border"
+  const size = collapsed
+    ? "lg:w-[44px] lg:min-h-[44px] lg:justify-center lg:gap-0 px-3 py-2.5 min-h-[44px]"
+    : "px-3 py-2.5 min-h-[44px]"
+  const tone = active
+    ? "bg-[var(--accent-soft)] text-[var(--accent)] border-[var(--accent-border)] font-medium"
+    : "text-[var(--text-dim)] border-transparent hover:text-[var(--text)] hover:bg-[var(--surface)]"
+  return (
+    <NavLink
+      key={itemKey}
+      to={to}
+      end={end}
+      title={t(labelKey)}
+      onClick={onNavigate}
+      className={cn(base, size, tone)}
+    >
+      {({ isActive }) => {
+        const highlighted = isActive || active
+        return (
+          <>
+            <Icon aria-hidden className={cn("w-[18px] h-[18px] shrink-0", highlighted && "stroke-[var(--accent)]")} strokeWidth={highlighted ? 2 : 1.7} />
+            <span className={cn("truncate", collapsed && "lg:hidden")}>{t(labelKey)}</span>
+          </>
+        )
+      }}
+    </NavLink>
+  )
+}
+
 function Sidebar() {
   const { t } = useTranslation()
   const loc = useLocation()
@@ -140,12 +223,11 @@ function Sidebar() {
   const toggleCollapsed = useUiStore((s) => s.toggleCollapsed)
   const mobileOpen = useUiStore((s) => s.mobileOpen)
   const setMobileOpen = useUiStore((s) => s.setMobileOpen)
-  const activeKey = loc.pathname === "/" ? "home" : loc.pathname.startsWith("/editor") ? "editor" : loc.pathname.startsWith("/companies") ? "companies" : loc.pathname.startsWith("/records") ? "records" : "settings"
+  const activeKey = resolveNavKey(loc.pathname)
+  const closeMobile = () => setMobileOpen(false)
   return (
     <>
-      {mobileOpen && (
-        <div className="fixed inset-0 z-30 bg-black/60 lg:hidden" onClick={() => setMobileOpen(false)} aria-hidden />
-      )}
+      {mobileOpen && <SidebarOverlay onClose={closeMobile} />}
       <aside
         className={cn(
           "fixed lg:static inset-y-0 left-0 z-40 h-dvh flex flex-col bg-[var(--bg)] border-r border-[var(--border)] shrink-0 transition-all duration-200 ease-out motion-reduce:transition-none",
@@ -154,55 +236,21 @@ function Sidebar() {
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0 max-lg:pointer-events-none"
         )}
       >
-        <div className={cn("flex items-center gap-2.5 px-4 h-[60px] shrink-0", collapsed && "lg:justify-center lg:px-0")}>
-          <button
-            onClick={() => { if (collapsed && window.matchMedia("(min-width: 1024px)").matches) toggleCollapsed() }}
-            title={collapsed ? t("nav.expandMenu") : undefined}
-            aria-label={collapsed ? t("nav.expandMenu") : t("nav.brand")}
-            className={cn("group/logo flex items-center gap-2.5 rounded-xl transition", collapsed && "lg:cursor-pointer")}
-          >
-            <span className="w-8 h-8 shrink-0 rounded-lg bg-gradient-to-br from-[var(--accent)] to-[var(--accent-ink)] flex items-center justify-center text-[var(--on-accent)] relative overflow-hidden">
-              <Leaf size={16} strokeWidth={2} className={cn("absolute inset-0 m-auto transition-opacity duration-150", collapsed && "lg:group-hover/logo:opacity-0")} />
-              {collapsed && <PanelLeftOpen size={16} className="absolute inset-0 m-auto opacity-0 lg:group-hover/logo:opacity-100 transition-opacity duration-150" />}
-            </span>
-            <span className={cn("font-semibold text-[var(--text)] text-[15px] tracking-tight truncate", collapsed && "lg:hidden")}>{t("nav.brand")}</span>
-          </button>
-          {!collapsed && (
-            <button
-              onClick={toggleCollapsed}
-              title={t("nav.collapseMenu")}
-              aria-label={t("nav.collapseMenu")}
-              className="ml-auto w-10 h-10 hidden lg:flex items-center justify-center rounded-lg text-[var(--text-dim)] hover:bg-[var(--surface)] hover:text-[var(--text)] transition"
-            >
-              <PanelLeftClose size={15} />
-            </button>
-          )}
-        </div>
+        <BrandHeader collapsed={collapsed} onExpand={toggleCollapsed} onCollapse={toggleCollapsed} />
         <nav aria-label={t("nav.brand")} className={cn("flex-1 flex flex-col gap-0.5 px-3 overflow-y-auto", collapsed && "lg:px-2 lg:items-center")}>
-          {items.map((it) => {
-            const Icon = it.icon
-            return (
-              <NavLink
-                key={it.key}
-                to={it.to}
-                end={it.to === "/"}
-                title={t(it.labelKey)}
-                onClick={() => setMobileOpen(false)}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl text-[13px] leading-none transition-colors border",
-                  collapsed ? "lg:w-[44px] lg:min-h-[44px] lg:justify-center lg:gap-0 px-3 py-2.5 min-h-[44px]" : "px-3 py-2.5 min-h-[44px]",
-                  activeKey === it.key ? "bg-[var(--accent-soft)] text-[var(--accent)] border-[var(--accent-border)] font-medium" : "text-[var(--text-dim)] border-transparent hover:text-[var(--text)] hover:bg-[var(--surface)]"
-                )}
-              >
-                {({ isActive }) => (
-                  <>
-                    <Icon aria-hidden className={cn("w-[18px] h-[18px] shrink-0", (isActive || activeKey === it.key) && "stroke-[var(--accent)]")} strokeWidth={isActive || activeKey === it.key ? 2 : 1.7} />
-                    <span className={cn("truncate", collapsed && "lg:hidden")}>{t(it.labelKey)}</span>
-                  </>
-                )}
-              </NavLink>
-            )
-          })}
+          {items.map((it) => (
+            <NavItem
+              key={it.key}
+              to={it.to}
+              itemKey={it.key}
+              labelKey={it.labelKey}
+              Icon={it.icon}
+              end={it.to === "/"}
+              active={activeKey === it.key}
+              collapsed={collapsed}
+              onNavigate={closeMobile}
+            />
+          ))}
         </nav>
         <div className={cn("border-t border-[var(--border)] mt-2 pt-2", collapsed && "lg:flex lg:justify-center")}>
           <ProfileFooter collapsed={collapsed} />

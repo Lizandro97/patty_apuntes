@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react"
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react"
 import { AlertCircle, CheckCircle2, Info } from "lucide-react"
 
 export type ToastKind = "success" | "error" | "info"
@@ -39,8 +39,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       </div>
     )
   }
+  const value = useMemo(() => ({ push }), [push])
   return (
-    <ToastCtx.Provider value={{ push }}>
+    <ToastCtx.Provider value={value}>
       {children}
       <div
         aria-live="polite"

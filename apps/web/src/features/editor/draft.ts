@@ -129,15 +129,13 @@ export async function syncSnapshotToServer(
       try { await editorApi.patchRecord(recordId!, patch) } catch { /* best-effort */ }
     }
   }
-  // Deleted rows in target (leftover on server) -> DELETE
+  // Deleted rows in target (leftover on server) -> DELETE (independent: run together)
   const tIds = new Set(tFilas.map((f: any) => f.id))
   const sIds = new Set(sFilas.map((f: any) => f.id))
   const recreatedOldIds = new Set<string>()
-  for (const f of sFilas) {
-    if (!tIds.has(f.id)) {
-      try { await editorApi.deleteRow(recordId!, f.id) } catch { /* best-effort */ }
-    }
-  }
+  await Promise.all(sFilas.filter((f: any) => !tIds.has(f.id)).map((f: any) =>
+    editorApi.deleteRow(recordId!, f.id).catch(() => null),
+  ))
   // Rows missing on the server (were deleted) -> recreate
   for (const f of tFilas) {
     if (!sIds.has(f.id)) {

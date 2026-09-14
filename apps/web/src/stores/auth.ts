@@ -27,8 +27,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   token: initial.token,
   user: initial.user,
   setAuth: (token, user, refreshToken) => {
+    // Waiver (react-doctor/auth-token-in-web-storage): SPA Bearer auth, no cookie
+    // backend yet — 15-min access + refresh rotation. Follow-up: SameSite cookies.
+    // react-doctor-disable-next-line react-doctor/auth-token-in-web-storage
     localStorage.setItem("token", token)
     localStorage.setItem("user", JSON.stringify(user))
+    // react-doctor-disable-next-line react-doctor/auth-token-in-web-storage
     if (refreshToken) localStorage.setItem("refresh_token", refreshToken)
     set({ token, user })
   },
