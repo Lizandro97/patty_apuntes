@@ -1,3 +1,14 @@
+---
+title: Patty Api
+emoji: 🐢
+colorFrom: yellow
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+short_description: Patty api
+---
+
 # Patty Apuntes — SPA contable
 
 Replica de la imagen de referencia adaptada a SPA configurable.
