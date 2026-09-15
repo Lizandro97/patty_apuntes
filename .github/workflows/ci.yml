@@ -16,8 +16,8 @@ jobs:
       - run: python -m ruff check apps/backend/app apps/backend/tests
         working-directory: .
       - run: python -m ruff format --check apps/backend/app apps/backend/tests
-      - run: python -m pytest apps/backend/tests -q
-        working-directory: .
+      - run: python -m pytest tests -q
+        working-directory: apps/backend
 
   backend-pg:
     runs-on: ubuntu-latest
@@ -53,8 +53,8 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/patty
       # Tests self-isolate to temp SQLite via tests/conftest.py; the PG
       # coverage here is the init + Alembic migration above.
-      - run: python -m pytest apps/backend/tests -q
-        working-directory: .
+      - run: python -m pytest tests -q
+        working-directory: apps/backend
 
   packages:
     runs-on: ubuntu-latest
