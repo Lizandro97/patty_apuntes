@@ -1,0 +1,18 @@
+# Keep the HF/Railway-style Docker build context small: only apps/backend ships.
+.git/
+.github/
+apps/web/node_modules/
+apps/web/dist/
+apps/backend/.venv/
+apps/backend/uploads/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.ruff_cache/
+*.db
+*.sqlite
+*.sqlite3
+.env
+.env.*
+node_modules/
+dist/
